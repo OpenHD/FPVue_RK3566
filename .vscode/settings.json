@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "typeinfo": "c",
+        "osd.h": "c",
+        "mavlink.h": "c"
+    }
+}
