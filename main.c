@@ -455,7 +455,7 @@ int read_filesrc_stream(MppPacket *packet) {
             if(!first_time_has_data_logged){
                 printf("Got input data %d\n",data_len);
                 printf("not logging again\n");
-                first_time_has_data_logged=false;
+                first_time_has_data_logged=true;
             }
             mpp_packet_set_data(packet, data_p);
             mpp_packet_set_size(packet, data_len);
@@ -467,7 +467,7 @@ int read_filesrc_stream(MppPacket *packet) {
             if(!first_time_fed_data_logged){
                 printf("Fed data\n");
                 printf("not logging again\n");
-                first_time_fed_data_logged=false;
+                first_time_fed_data_logged=true;
             }
         }else{
             usleep(1*1000);
@@ -595,8 +595,8 @@ int main(int argc, char **argv)
 	}
 
     // H264 or H265
-	//MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
-    MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
+	MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
+    //MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
 	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
 	assert(!ret);
 
