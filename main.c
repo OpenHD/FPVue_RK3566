@@ -465,7 +465,7 @@ int read_filesrc_stream(MppPacket *packet) {
     }
     printf("Feeding eos\n");
     mpp_packet_set_eos(packet);
-    mpp_packet_set_pos(packet, nal_buffer);
+    //mpp_packet_set_pos(packet, nal_buffer);
     mpp_packet_set_length(packet, 0);
     while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
         usleep(10000);
