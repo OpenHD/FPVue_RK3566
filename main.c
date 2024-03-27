@@ -447,7 +447,7 @@ int read_filesrc_stream(MppPacket *packet) {
     int data_len=0;
     int ret = 0;
     while (true){
-        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp;
+        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp);
         if(data_len>0){
             printf("Got data %d\n",data_len);
             mpp_packet_set_data(packet, data_p);
