@@ -440,12 +440,12 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 #define DEFAULT_PACKET_SIZE (1024*1024)
 int read_filesrc_stream(MppPacket *packet) {
-    FILE* fp = fopen("urghs.h264", "rb");
+    /*FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
         printf("File not found\n");
         return 0;
-    }
-    //FILE* fp=stdin;
+    }*/
+    FILE* fp=stdin;
     fcntl(fp, F_SETFL, fcntl(fp, F_GETFL) | O_NONBLOCK);
     uint8_t data[1024*1024];
     void* data_p=&data;
