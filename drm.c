@@ -270,7 +270,7 @@ int modeset_setup_objects(int fd, struct modeset_output *out)
 	struct drm_object *connector = &out->connector;
 	struct drm_object *crtc = &out->crtc;
 	struct drm_object *plane_video = &out->video_plane;
-	struct drm_object *plane_osd = &out->osd_plane;
+	//struct drm_object *plane_osd = &out->osd_plane;
 
 	modeset_get_object_properties(fd, connector, DRM_MODE_OBJECT_CONNECTOR);
 	if (!connector->props)
@@ -283,9 +283,9 @@ int modeset_setup_objects(int fd, struct modeset_output *out)
 	modeset_get_object_properties(fd, plane_video, DRM_MODE_OBJECT_PLANE);
 	if (!plane_video->props)
 		goto out_plane;
-	modeset_get_object_properties(fd, plane_osd, DRM_MODE_OBJECT_PLANE);
+	/*modeset_get_object_properties(fd, plane_osd, DRM_MODE_OBJECT_PLANE);
 	if (!plane_osd->props)
-		goto out_plane;
+		goto out_plane;*/
 	return 0;
 
 out_plane:
@@ -302,7 +302,7 @@ void modeset_destroy_objects(int fd, struct modeset_output *out)
 	modeset_drm_object_fini(&out->connector);
 	modeset_drm_object_fini(&out->crtc);
 	modeset_drm_object_fini(&out->video_plane);
-	modeset_drm_object_fini(&out->osd_plane);
+	//modeset_drm_object_fini(&out->osd_plane);
 }
 
 
@@ -474,12 +474,12 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 	}
 	fprintf(stdout, "Using plane %d (NV12) for Video\n",  out->video_plane.id);
 
-	ret = modeset_find_plane(fd, out, &out->osd_plane, DRM_FORMAT_ARGB8888);
+	/*ret = modeset_find_plane(fd, out, &out->osd_plane, DRM_FORMAT_ARGB8888);
 	if (ret) {
 		fprintf(stderr, "no valid osd plane with format ARGB8888 for crtc %u\n", out->crtc.id);
 		goto out_blob;
 	}
-	fprintf(stdout, "Using plane %d (ARGB8888) for OSD\n",  out->osd_plane.id);
+	fprintf(stdout, "Using plane %d (ARGB8888) for OSD\n",  out->osd_plane.id);*/
 
 	ret = modeset_setup_objects(fd, out);
 	if (ret) {
