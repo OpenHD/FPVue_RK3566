@@ -503,6 +503,8 @@ void printHelp() {
     "    --mpp-split-mode  	- Enable rockchip MPP_DEC_SET_PARSER_SPLIT_MODE, required when the video stream uses slices\n"
     "\n"
     "    --screen-mode      - Override default screen mode. ex:1920x1080@120\n"
+    "\n"
+    "    --h265      - Decode h265. H264 is default. \n"
     "\n", __DATE__
   );
 }
@@ -520,6 +522,7 @@ int main(int argc, char **argv)
 	uint16_t mode_width = 0;
 	uint16_t mode_height = 0;
 	uint32_t mode_vrefresh = 0;
+    bool decode_h265=false;
 	// Load console arguments
 	__BeginParseConsoleArguments__(printHelp) 
 	
@@ -588,6 +591,11 @@ int main(int argc, char **argv)
 		continue;
 	}
 
+    __OnArgument("--h265") {
+        decode_h265=true;
+        continue;
+    }
+
 	__EndParseConsoleArguments__
 
 	if (enable_osd == 0 ) {
@@ -595,7 +603,14 @@ int main(int argc, char **argv)
 	}
 
     // H264 or H265
-	MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
+    MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
+    if(decode_h265){
+        printf("Decoding h265\n");
+        mpp_type = MPP_VIDEO_CodingHEVC;
+    }else{
+        printf("Decoding h264 (default)\n");
+    }
+	//MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
     //MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
 	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
 	assert(!ret);
