@@ -389,14 +389,15 @@ void modeset_destroy_fb(int fd, struct modeset_buf *buf)
 
 int modeset_setup_framebuffers(int fd, drmModeConnector *conn, struct modeset_output *out)
 {
-	for (int i=0; i<OSD_BUF_COUNT; i++) {
+    // OSD disable
+	/*for (int i=0; i<OSD_BUF_COUNT; i++) {
 		out->osd_bufs[i].width = out->mode.hdisplay;
 		out->osd_bufs[i].height = out->mode.vdisplay;
 		int ret = modeset_create_fb(fd, &out->osd_bufs[i]);
 		if (ret) {
 			return ret;
 		}
-	}
+	}*/
 	out->video_crtc_width = out->mode.hdisplay;
 	out->video_crtc_height = out->mode.vdisplay;
 	return 0;
@@ -406,10 +407,10 @@ int modeset_setup_framebuffers(int fd, drmModeConnector *conn, struct modeset_ou
 void modeset_output_destroy(int fd, struct modeset_output *out)
 {
 	modeset_destroy_objects(fd, out);
-
-	for (int i=0; i<OSD_BUF_COUNT; i++) { 
+    // OSD disable
+	/*for (int i=0; i<OSD_BUF_COUNT; i++) {
 		modeset_destroy_fb(fd, &out->osd_bufs[i]);
-	}
+	}*/
 	drmModeDestroyPropertyBlob(fd, out->mode_blob_id);
 	free(out);
 }
@@ -621,7 +622,8 @@ int modeset_atomic_prepare_commit(int fd, struct modeset_output *out, drmModeAto
 
 void restore_planes_zpos(int fd, struct modeset_output *output_list) {
 	// restore osd zpos
-	int ret, flags;
+    // OSD Disable
+	/*int ret, flags;
 	struct modeset_buf *buf = &output_list->osd_bufs[0];
 
 	// TODO(geehe) Find a more elegant way to do this.
@@ -643,7 +645,7 @@ void restore_planes_zpos(int fd, struct modeset_output *output_list) {
 	}
 	ret = drmModeAtomicCommit(fd, output_list->video_request, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
 	if (ret < 0) 
-		fprintf(stderr, "modeset atomic commit failed for plane %d, %m\n", output_list->video_plane.id);
+		fprintf(stderr, "modeset atomic commit failed for plane %d, %m\n", output_list->video_plane.id);*/
 }
 
 void modeset_cleanup(int fd, struct modeset_output *output_list)
