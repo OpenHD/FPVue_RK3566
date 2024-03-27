@@ -437,6 +437,29 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
+#define DEFAULT_PACKET_SIZE (1024*1024)
+int read_filesrc_stream(MppPacket *packet) {
+    //FILE* fp = fopen("input.h264", "rb");
+    uint8_t data[1024*1024];
+    void* data_p=&data;
+    int data_len=0;
+    int ret = 0;
+    while (true){
+        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, stdin);
+        if(data_len>0){
+            printf("Got data %d\n",data_len);
+            mpp_packet_set_data(packet, data_p);
+            mpp_packet_set_size(packet, data_len);
+            mpp_packet_set_pos(packet, data_p);
+            mpp_packet_set_length(packet, data_len);
+            while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+                usleep(10000);
+            }
+            printf("Fed data\n");
+        }
+    }
+}
+
 void printHelp() {
   printf(
     "\n\t\tFPVue FPV Decoder for Rockchip (%s)\n"
@@ -616,7 +639,8 @@ int main(int argc, char **argv)
 
 	////////////////////////////////////////////// MAIN LOOP
 	
-	read_rtp_stream(listen_port, packet, nal_buffer);
+	//read_rtp_stream(listen_port, packet, nal_buffer);
+    read_filesrc_stream(packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 
