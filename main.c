@@ -440,12 +440,14 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 #define DEFAULT_PACKET_SIZE (1024*1024)
 int read_filesrc_stream(MppPacket *packet) {
     //FILE* fp = fopen("input.h264", "rb");
+    FILE* fp=stdin;
+    fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
     uint8_t data[1024*1024];
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
     while (true){
-        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, stdin);
+        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp;
         if(data_len>0){
             printf("Got data %d\n",data_len);
             mpp_packet_set_data(packet, data_p);
