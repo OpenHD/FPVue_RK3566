@@ -446,7 +446,7 @@ int read_filesrc_stream(MppPacket *packet) {
         return;
     }
     //FILE* fp=stdin;
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    fcntl(fp, F_SETFL, fcntl(fp, F_GETFL) | O_NONBLOCK);
     uint8_t data[1024*1024];
     void* data_p=&data;
     int data_len=0;
