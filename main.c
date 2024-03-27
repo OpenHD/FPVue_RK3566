@@ -440,8 +440,8 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 #define DEFAULT_PACKET_SIZE (1024*1024)
 int read_filesrc_stream(MppPacket *packet) {
-    //FILE* fp = fopen("input.h264", "rb");
-    FILE* fp=stdin;
+    FILE* fp = fopen("urghs.h264", "rb");
+    //FILE* fp=stdin;
     fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
     uint8_t data[1024*1024];
     void* data_p=&data;
