@@ -457,7 +457,7 @@ int read_filesrc_stream(MppPacket *packet) {
         data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp);
         if(data_len>0){
             if(!first_time_has_data_logged){
-                printf("Got input data %d\n",data_len);
+                //printf("Got input data %d\n",data_len);
                 //printf("not logging again\n");
                 //first_time_has_data_logged=true;
             }
@@ -469,7 +469,7 @@ int read_filesrc_stream(MppPacket *packet) {
                 usleep(10000);
             }
             if(!first_time_fed_data_logged){
-                printf("Fed data\n");
+                //printf("Fed data\n");
                 //printf("not logging again\n");
                 //first_time_fed_data_logged=true;
             }
