@@ -644,6 +644,14 @@ int main(int argc, char **argv)
 	ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &mpp_split_mode);
 	assert(!ret);
 
+    if(!decode_h265){
+        int fast_mode = 1;
+        mpi.control (mpi.ctx, MPP_DEC_SET_PARSER_FAST_MODE,
+                      &fast_mode);
+        int immediate = 1;
+        mpi.control (mpi.ctx, MPP_DEC_SET_IMMEDIATE_OUT,
+                      &immediate);
+    }
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
 	assert(!ret);
 
