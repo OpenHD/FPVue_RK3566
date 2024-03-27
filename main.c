@@ -583,8 +583,10 @@ int main(int argc, char **argv)
 	if (enable_osd == 0 ) {
 		video_zpos = 4;
 	}
-		
-	MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
+
+    // H264 or H265
+	//MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
+    MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
 	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
 	assert(!ret);
 
