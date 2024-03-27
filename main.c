@@ -443,7 +443,7 @@ int read_filesrc_stream(MppPacket *packet) {
     FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
         printf("File not found\n");
-        return;
+        return 0;
     }
     //FILE* fp=stdin;
     fcntl(fp, F_SETFL, fcntl(fp, F_GETFL) | O_NONBLOCK);
