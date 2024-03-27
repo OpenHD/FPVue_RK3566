@@ -523,7 +523,7 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     /* get default config from decoder context */
     int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
     if (ret) {
-        mpp_err("%p failed to get decoder cfg ret %d\n", ctx, ret);
+        printf("%p failed to get decoder cfg ret %d\n", ctx, ret);
         return false;
     }
 
@@ -533,7 +533,7 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
      */
     ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
     if (ret) {
-        mpp_err("%p failed to set split_parse ret %d\n", ctx, ret);
+        printf("%p failed to set split_parse ret %d\n", ctx, ret);
         return false;
     }
 
@@ -551,7 +551,7 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     }
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
     if (ret) {
-        mpp_err("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
+        printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
         return false;
     }
     mpi->control (ctx, MPP_DEC_SET_PARSER_FAST_MODE,
