@@ -194,6 +194,7 @@ void *__FRAME_THREAD__(void *param)
 
 				MppBuffer buffer = mpp_frame_get_buffer(frame);					
 				if (buffer) {
+                    printf("Got frame\n");
 					output_list->video_poc = mpp_frame_get_poc(frame);
 					// find fb_id by frame prime_fd
 					MppBufferInfo info;
@@ -458,7 +459,16 @@ int read_filesrc_stream(MppPacket *packet) {
                 usleep(10000);
             }
             printf("Fed data\n");
+        }else{
+            usleep(1*1000);
         }
+    }
+    printf("Feeding eos\n");
+    mpp_packet_set_eos(packet);
+    mpp_packet_set_pos(packet, nal_buffer);
+    mpp_packet_set_length(packet, 0);
+    while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+        usleep(10000);
     }
 }
 
