@@ -509,6 +509,56 @@ void printHelp() {
   );
 }
 
+
+bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
+
+    // config for runtime mode
+    MppDecCfg cfg       = NULL;
+    RK_U32 need_split   = 1;
+
+    int fast_mode = 1;
+
+    mpp_dec_cfg_init(&cfg);
+
+    /* get default config from decoder context */
+    int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
+    if (ret) {
+        mpp_err("%p failed to get decoder cfg ret %d\n", ctx, ret);
+        return false;
+    }
+
+    /*
+     * split_parse is to enable mpp internal frame spliter when the input
+     * packet is not aplited into frames.
+     */
+    ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
+    if (ret) {
+        mpp_err("%p failed to set split_parse ret %d\n", ctx, ret);
+        return false;
+    }
+
+    RK_U32 dat = 0xffff;
+    RK_U32 ret1 = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &dat);
+    dat = 0xffff;
+    RK_U32 ret2 = mpi->control(ctx, MPP_DEC_SET_DISABLE_ERROR, &dat);
+    dat = 0xffff;
+    RK_U32 ret3 = mpi->control(ctx, MPP_DEC_SET_IMMEDIATE_OUT, &dat);
+    dat = 0xffff;
+    RK_U32 ret4 = mpi->control(ctx, MPP_DEC_SET_ENABLE_FAST_PLAY, &dat);
+    if (ret1 | ret2 | ret3 | ret4) {
+        printf("Could not set decoder params on startup\n");
+        return false;
+    }
+    ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
+    if (ret) {
+        mpp_err("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
+        return false;
+    }
+    mpi->control (ctx, MPP_DEC_SET_PARSER_FAST_MODE,
+                  &fast_mode);
+    return true;
+}
+
 // main
 
 int main(int argc, char **argv)
@@ -653,6 +703,9 @@ int main(int argc, char **argv)
                       &immediate);
     }
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
+    if(!decode_h265){
+        weird_init_h264(mpi.mpi,mpi.ctx);
+    }
 	assert(!ret);
 
 	// blocked/wait read of frame in thread
