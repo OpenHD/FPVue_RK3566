@@ -474,7 +474,7 @@ int read_filesrc_stream(MppPacket *packet) {
                 //first_time_fed_data_logged=true;
             }
         }else{
-            usleep(1*1000);
+            usleep(2*1000);
         }
     }
     printf("Feeding eos\n");
