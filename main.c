@@ -447,10 +447,16 @@ int read_filesrc_stream(MppPacket *packet) {
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
+    bool first_time_has_data_logged=false;
+    bool first_time_fed_data_logged=false;
     while (!signal_flag){
         data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp);
         if(data_len>0){
-            printf("Got data %d\n",data_len);
+            if(!first_time_has_data_logged){
+                printf("Got input data %d\n",data_len);
+                printf("not logging again\n");
+                first_time_has_data_logged=false;
+            }
             mpp_packet_set_data(packet, data_p);
             mpp_packet_set_size(packet, data_len);
             mpp_packet_set_pos(packet, data_p);
@@ -458,7 +464,11 @@ int read_filesrc_stream(MppPacket *packet) {
             while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
                 usleep(10000);
             }
-            printf("Fed data\n");
+            if(!first_time_fed_data_logged){
+                printf("Fed data\n");
+                printf("not logging again\n");
+                first_time_fed_data_logged=false;
+            }
         }else{
             usleep(1*1000);
         }
