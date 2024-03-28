@@ -30,13 +30,13 @@ int modeset_open(int *out, const char *node)
 		return ret;
 	}
 
-	/*ret = drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+	ret = drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
 	if (ret) {
 		fprintf(stderr, "failed to set universal planes cap, %d\n", ret);
 		return ret;
 	}
 
-	ret = drmSetClientCap(fd, DRM_CLIENT_CAP_ATOMIC, 1);
+	/*ret = drmSetClientCap(fd, DRM_CLIENT_CAP_ATOMIC, 1);
 	if (ret) {
 		fprintf(stderr, "failed to set atomic cap, %d", ret);
 		return ret;
