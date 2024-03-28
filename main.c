@@ -699,9 +699,13 @@ int main(int argc, char **argv)
 	assert(!ret);
 
     if(!decode_h265){
-        int fast_mode = 1;
-        mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_FAST_MODE,
-                      &fast_mode);
+        // Docu fast mode:
+        // and improve the
+        // parallelism of decoder hardware and software
+        // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
+        //int fast_mode = 1;
+        //mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_FAST_MODE,
+        //              &fast_mode);
         int immediate = 1;
         mpi.mpi->control(mpi.ctx, MPP_DEC_SET_IMMEDIATE_OUT,
                       &immediate);
