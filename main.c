@@ -77,7 +77,7 @@ struct video_stats osd_stats;
 int bw_curr = 0;
 long long bw_stats[10];
 int video_zpos = 1;
-
+bool never_call_drmModeAtomicCommit=false;
 
 // __FRAME_THREAD__
 //
@@ -269,14 +269,22 @@ void *__DISPLAY_THREAD__(void *param)
 		ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
 		assert(ret>0);
 
-		ret = pthread_mutex_lock(&osd_mutex);
-		assert(!ret);	
+		//ret = pthread_mutex_lock(&osd_mutex);
+		//assert(!ret);
 		//ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
 		//assert(ret>0);
-		drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK, NULL);
-		ret = pthread_mutex_unlock(&osd_mutex);
+        if(!never_call_drmModeAtomicCommit){
+            drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK, NULL);
+        }else{
+            static bool logged_once=false;
+            if(!logged_once){
+                printf("Not calling drmModeAtomicCommit\n");
+                logged_once=true;
+            }
+        }
+		//ret = pthread_mutex_unlock(&osd_mutex);
 
-		assert(!ret);
+		//assert(!ret);
 		frame_counter++;
 
 		clock_gettime(CLOCK_MONOTONIC, &fps_end);
@@ -509,6 +517,8 @@ void printHelp() {
     "    --screen-mode      - Override default screen mode. ex:1920x1080@120\n"
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
+    "\n"
+    "    --nocommit      - Just never call drmModeAtomicCommit \n"
     "\n", __DATE__
   );
 }
@@ -647,6 +657,10 @@ int main(int argc, char **argv)
 
     __OnArgument("--h265") {
         decode_h265=true;
+        continue;
+    }
+    __OnArgument("--nocommit") {
+        never_call_drmModeAtomicCommit=true;
         continue;
     }
 
