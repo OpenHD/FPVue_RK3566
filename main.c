@@ -235,7 +235,6 @@ void *__FRAME_THREAD__(void *param)
 	printf("Frame thread done.\n");
 }
 
-
 void *__DISPLAY_THREAD__(void *param)
 {
 	int ret;	
@@ -270,16 +269,17 @@ void *__DISPLAY_THREAD__(void *param)
 		ret = pthread_mutex_unlock(&video_mutex);
 		assert(!ret);
 
-		// show DRM FB in plane
-		drmModeAtomicSetCursor(output_list->video_request, 0);
-		ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
-		assert(ret>0);
-
-		//ret = pthread_mutex_lock(&osd_mutex);
-		//assert(!ret);
-		//ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
-		//assert(ret>0);
         if(!never_call_drmModeAtomicCommit){
+            // show DRM FB in plane
+            drmModeAtomicSetCursor(output_list->video_request, 0);
+            ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
+            assert(ret>0);
+
+            //ret = pthread_mutex_lock(&osd_mutex);
+            //assert(!ret);
+            //ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
+            //assert(ret>0);
+        
             drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK, NULL);
         }else{
             static bool logged_once=false;
@@ -287,9 +287,17 @@ void *__DISPLAY_THREAD__(void *param)
                 printf("Not calling drmModeAtomicCommit\n");
                 logged_once=true;
             }
+            
+
+            drmModeSetCrtc(
+                drm_fd, output_list->saved_crtc->crtc_id, fb_id,
+                0, 0,
+                &output_list->connector.id,
+                1,
+                &output_list->saved_crtc->mode);
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
-
+        
 		//assert(!ret);
 		frame_counter++;
 
@@ -452,7 +460,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
-#define DEFAULT_PACKET_SIZE (1024*1024)
+#define DEFAULT_PACKET_SIZE (16*1024)
 int read_filesrc_stream(MppPacket *packet) {
     /*FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
