@@ -295,7 +295,7 @@ void *__FRAME_THREAD__(void *param)
 			if (mpp_frame_get_info_change(frame)) {
 				// new resolution
 				assert(!mpi.frm_grp);
-                initialize_output_buffers(frame);
+                initialize_output_buffers2(frame);
 			} else {
 				// regular frame received
 				if (!mpi.first_frame_ts.tv_sec) {
