@@ -294,7 +294,7 @@ void *__DISPLAY_THREAD__(void *param)
                 0, 0,
                 &output_list->connector.id,
                 1,
-                &output_list->saved_crtc->mode);
+                NULL); // &output_list->saved_crtc->mode
             uint64_t elapsed_crtc=get_time_ms()-before;
             print_time_ms("drmModeSetCrtc took",elapsed_crtc);
             /*drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
