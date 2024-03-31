@@ -89,6 +89,8 @@ int develop_rendering_mode=0;
 
 
 void initialize_output_buffers(MppFrame  frame){
+    int ret;
+    int i;
     // new resolution
     assert(!mpi.frm_grp);
 
