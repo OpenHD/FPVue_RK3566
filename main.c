@@ -288,7 +288,7 @@ void *__DISPLAY_THREAD__(void *param)
                 printf("Not calling drmModeAtomicCommit\n");
                 logged_once=true;
             }
-            uint64_t before=get_time_ms();
+            /*uint64_t before=get_time_ms();
             drmModeSetCrtc(
                 drm_fd, output_list->saved_crtc->crtc_id, fb_id,
                 0, 0,
@@ -296,7 +296,9 @@ void *__DISPLAY_THREAD__(void *param)
                 1,
                 &output_list->saved_crtc->mode);
             uint64_t elapsed_crtc=get_time_ms()-before;
-            print_time_ms("drmModeSetCrtc took",elapsed_crtc);
+            print_time_ms("drmModeSetCrtc took",elapsed_crtc);*/
+            drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
+                                  DRM_MODE_PAGE_FLIP_ASYNC,NULL);
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
         

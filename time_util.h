@@ -21,7 +21,7 @@ uint64_t get_time_ms() {
 }
 
 void print_time_ms(const char* tag,uint64_t ms){
-    printf("%s %d",tag,(int)ms);
+    printf("%s %dms\n",tag,(int)ms);
 }
 
 
