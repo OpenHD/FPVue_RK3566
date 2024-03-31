@@ -164,7 +164,7 @@ void *__FRAME_THREAD__(void *param)
                         info.type = MPP_BUFFER_TYPE_ION;
                         info.size = dmcd.width*dmcd.height;
                         //Yinfo.fd = dph.fd;
-                        int drm_buf_size = dmcd.width*dmcd.height * 3 / 2;
+                        int drm_buf_size = dmcd.width*dmcd.height*dmcd.bpp ;
                         void* mmap_framebuf = mmap(
                                 0, drm_buf_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                                 dph.fd, 0);
