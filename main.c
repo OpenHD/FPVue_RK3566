@@ -125,9 +125,6 @@ void *__FRAME_THREAD__(void *param)
                 if(use_weird_pete){
                     ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_ION);
                     assert(!ret);
-                    for (i = 0; i < FRAMEBUFFERS; i++) {
-
-                    }
 
                 }else{
                     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
