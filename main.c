@@ -36,6 +36,7 @@
 
 #include "mavlink/common/mavlink.h"
 #include "mavlink.h"
+#include "time_util.h"
 
 
 
@@ -279,7 +280,7 @@ void *__DISPLAY_THREAD__(void *param)
             //assert(!ret);
             //ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
             //assert(ret>0);
-        
+            //  DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_ASYNC
             drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK, NULL);
         }else{
             static bool logged_once=false;
@@ -287,14 +288,15 @@ void *__DISPLAY_THREAD__(void *param)
                 printf("Not calling drmModeAtomicCommit\n");
                 logged_once=true;
             }
-            
-
+            uint64_t before=get_time_ms();
             drmModeSetCrtc(
                 drm_fd, output_list->saved_crtc->crtc_id, fb_id,
                 0, 0,
                 &output_list->connector.id,
                 1,
                 &output_list->saved_crtc->mode);
+            uint64_t elapsed_crtc=get_time_ms()-before;
+            print_time_ms("drmModeSetCrtc took",elapsed_crtc);
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
         
