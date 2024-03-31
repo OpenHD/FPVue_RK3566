@@ -197,6 +197,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
     assert(!mpi.frm_grp);
     ret = mpp_buffer_group_get_external(&mpi.frm_grp,  MPP_BUFFER_TYPE_ION);
     assert(!ret);
+    int first_framebuffer_id;
+    bool first_framebuffer_set=false;
     for (i=0; i<MAX_FRAMES; i++) {
 
         // new DRM buffer
@@ -222,6 +224,9 @@ void initialize_output_buffers_ion(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
+        if(!first_framebuffer_set){
+            first_framebuffer_id= dph.fd;
+        }
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
         info.type =  MPP_BUFFER_TYPE_ION;
@@ -241,7 +246,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
             );
             assert(false);
         }*/
-        info.fd = dph.fd;
+        //info.fd = dph.fd;
+        info.fd=first_framebuffer_id;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
@@ -250,7 +256,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
             assert(!ret);
         }
         // allocate DRM FB from DRM buffer
-        uint32_t handles[4], pitches[4], offsets[4];
+        /*uint32_t handles[4], pitches[4], offsets[4];
         memset(handles, 0, sizeof(handles));
         memset(pitches, 0, sizeof(pitches));
         memset(offsets, 0, sizeof(offsets));
@@ -261,7 +267,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
-        assert(!ret);
+        assert(!ret);*/
     }
 
     // register external frame group
