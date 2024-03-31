@@ -82,11 +82,6 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 
-// __FRAME_THREAD__
-//
-// - allocate DRM buffers and DRM FB based on frame size
-// - pick frame in blocking mode and output to screen overlay
-
 
 void initialize_output_buffers(MppFrame  frame){
     int ret;
@@ -117,7 +112,7 @@ void initialize_output_buffers(MppFrame  frame){
     }else{
         // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
         assert(!mpi.frm_grp);
-        ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_DRM;
+        ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_DRM);
         assert(!ret);
         for (i=0; i<MAX_FRAMES; i++) {
 
@@ -180,6 +175,11 @@ void initialize_output_buffers(MppFrame  frame){
     }
 }
 
+
+// __FRAME_THREAD__
+//
+// - allocate DRM buffers and DRM FB based on frame size
+// - pick frame in blocking mode and output to screen overlay
 
 void *__FRAME_THREAD__(void *param)
 {
