@@ -41,7 +41,7 @@
 
 
 #define READ_BUF_SIZE (1024*1024) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
-#define MAX_FRAMES 1		// min 16 and 20+ recommended (mpp/readme.txt)
+#define MAX_FRAMES 16		// min 16 and 20+ recommended (mpp/readme.txt)
 
 #define CODEC_ALIGN(x, a)   (((x)+(a)-1)&~((a)-1))
 
