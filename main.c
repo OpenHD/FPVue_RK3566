@@ -78,7 +78,7 @@ struct video_stats osd_stats;
 int bw_curr = 0;
 long long bw_stats[10];
 int video_zpos = 1;
-bool never_call_drmModeAtomicCommit=false;
+int develop_rendering_mode=0;
 
 // __FRAME_THREAD__
 //
@@ -270,7 +270,7 @@ void *__DISPLAY_THREAD__(void *param)
 		ret = pthread_mutex_unlock(&video_mutex);
 		assert(!ret);
 
-        if(!never_call_drmModeAtomicCommit){
+        if(develop_rendering_mode==0){
             // show DRM FB in plane
             drmModeAtomicSetCursor(output_list->video_request, 0);
             ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
@@ -281,24 +281,28 @@ void *__DISPLAY_THREAD__(void *param)
             //ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
             //assert(ret>0);
             //  DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_ASYNC
-            drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK, NULL);
-        }else{
+            drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK |  DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+        }else if(develop_rendering_mode==1){
             static bool logged_once=false;
             if(!logged_once){
                 printf("Not calling drmModeAtomicCommit\n");
                 logged_once=true;
             }
-            /*uint64_t before=get_time_ms();
+        }else if(develop_rendering_mode==2){
+            uint64_t before=get_time_ms();
             drmModeSetCrtc(
-                drm_fd, output_list->saved_crtc->crtc_id, fb_id,
-                0, 0,
-                &output_list->connector.id,
-                1,
-                &output_list->saved_crtc->mode);
+                    drm_fd, output_list->saved_crtc->crtc_id, fb_id,
+                    0, 0,
+                    &output_list->connector.id,
+                    1,
+                    &output_list->saved_crtc->mode);
             uint64_t elapsed_crtc=get_time_ms()-before;
-            print_time_ms("drmModeSetCrtc took",elapsed_crtc);*/
+            print_time_ms("drmModeSetCrtc took",elapsed_crtc);
+        }else if (develop_rendering_mode==3){
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
-                                  DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET,NULL);
+                            DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET,NULL);
+        }else{
+            printf("Unknown rendering mdoe\n");
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
         
@@ -536,7 +540,7 @@ void printHelp() {
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
     "\n"
-    "    --nocommit      - Just never call drmModeAtomicCommit \n"
+    "    --rmode      - different rendering modes for development \n"
     "\n", __DATE__
   );
 }
@@ -677,8 +681,9 @@ int main(int argc, char **argv)
         decode_h265=true;
         continue;
     }
-    __OnArgument("--nocommit") {
-        never_call_drmModeAtomicCommit=true;
+    __OnArgument("--rmode") {
+        char* mode = __ArgValue;
+        develop_rendering_mode= atoi(mode);
         continue;
     }
 
@@ -696,6 +701,7 @@ int main(int argc, char **argv)
     }else{
         printf("Decoding h264 (default)\n");
     }
+    printf("Rendering mode %d\n",develop_rendering_mode);
 	//MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
     //MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
 	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
