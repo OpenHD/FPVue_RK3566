@@ -163,8 +163,7 @@ void *__FRAME_THREAD__(void *param)
                         info.fd = dph.fd;
                         ret = mpp_buffer_commit(mpi.frm_grp, &info);
                         assert(!ret);
-                        //mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
-                        mpi.frame_to_drm[i].prime_fd = dph.fd;
+                        mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
                         if (dph.fd != info.fd) {
                             ret = close(dph.fd);
                             assert(!ret);
