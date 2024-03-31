@@ -45,6 +45,8 @@
 
 #define CODEC_ALIGN(x, a)   (((x)+(a)-1)&~((a)-1))
 
+#define WEIRD_ION_FRAMEBUFFERS 8;
+
 struct {
 	MppCtx		  ctx;
 	MppApi		  *mpi;
@@ -125,11 +127,14 @@ void *__FRAME_THREAD__(void *param)
                 if(use_weird_pete){
                     ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_ION);
                     assert(!ret);
+                    for (i = 0; i < WEIRD_ION_FRAMEBUFFERS; i++) {
+
+                    }
 
                 }else{
                     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
                     assert(!mpi.frm_grp);
-                    ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_DRM);
+                    ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_ION);
                     assert(!ret);
                     for (i=0; i<MAX_FRAMES; i++) {
 
@@ -158,9 +163,25 @@ void *__FRAME_THREAD__(void *param)
                         assert(!ret);
                         MppBufferInfo info;
                         memset(&info, 0, sizeof(info));
-                        info.type = MPP_BUFFER_TYPE_DRM;
+                        //Yinfo.type = MPP_BUFFER_TYPE_DRM;
+                        info.type = MPP_BUFFER_TYPE_ION;
                         info.size = dmcd.width*dmcd.height;
-                        info.fd = dph.fd;
+                        //Yinfo.fd = dph.fd;
+                        int drm_buf_size = dmcd.width*dmcd.height * 3 / 2;
+                        void* mmap_framebuf = mmap(
+                                0, drm_buf_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
+                                dph.fd, 0);
+                        if (mmap_framebuf == NULL || mmap_framebuf == MAP_FAILED) {
+                            printf(
+                                    "Could not map buffer exported through PRIME : %s (%d)\n"
+                                    "Buffer : %p\n",
+                                    strerror(ret), ret,
+                                    mmap_framebuf
+                            );
+                            assert(false);
+                        }
+                        info.ptr = mmap_framebuf;
+
                         ret = mpp_buffer_commit(mpi.frm_grp, &info);
                         assert(!ret);
                         mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
