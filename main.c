@@ -225,11 +225,13 @@ void initialize_output_buffers2(MppFrame  frame){
         memset(&info, 0, sizeof(info));
         info.type =  MPP_BUFFER_TYPE_ION;
         info.size = dmcd.width*dmcd.height;
+        info.index = i;
 
+        /*int DRMHandle=dph.handle;
         int drm_buf_size = dmcd.width*dmcd.height * 3 /2;
         void* mapped_fb = mmap(
                 0, drm_buf_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                dph.fd, 0);
+                DRMHandle, 0);
         if (mapped_fb == NULL || mapped_fb == MAP_FAILED) {
             printf(
                     "Could not map buffer exported through PRIME : %s (%d)\n"
@@ -238,8 +240,8 @@ void initialize_output_buffers2(MppFrame  frame){
                     mapped_fb
             );
             assert(false);
-        }
-
+        }*/
+        info.fd = dph.fd;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
