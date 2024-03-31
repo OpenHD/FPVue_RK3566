@@ -123,13 +123,18 @@ void *__FRAME_THREAD__(void *param)
 
                 bool use_weird_pete=false;
                 if(use_weird_pete){
+                    ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_ION);
+                    assert(!ret);
+                    for (i = 0; i < FRAMEBUFFERS; i++) {
+
+                    }
 
                 }else{
                     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
                     assert(!mpi.frm_grp);
                     ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_DRM);
                     assert(!ret);
-
+                    int first_drm_dumb_buffer=-1;
                     for (i=0; i<MAX_FRAMES; i++) {
 
                         // new DRM buffer
@@ -159,7 +164,11 @@ void *__FRAME_THREAD__(void *param)
                         memset(&info, 0, sizeof(info));
                         info.type = MPP_BUFFER_TYPE_DRM;
                         info.size = dmcd.width*dmcd.height;
-                        info.fd = dph.fd;
+                        if(first_drm_dumb_buffer==-1){
+                            first_drm_dumb_buffer=dph.fd;
+                        }
+                        //info.fd = dph.fd;
+                        info.fd=first_drm_dumb_buffer;
                         ret = mpp_buffer_commit(mpi.frm_grp, &info);
                         assert(!ret);
                         mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
