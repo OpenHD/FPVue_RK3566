@@ -170,7 +170,7 @@ void initialize_output_buffers(MppFrame  frame){
 
 }
 
-void initialize_output_buffers2(MppFrame  frame){
+void initialize_output_buffers_ion(MppFrame  frame){
     int ret;
     int i;
     // new resolution
@@ -296,7 +296,7 @@ void *__FRAME_THREAD__(void *param)
 			if (mpp_frame_get_info_change(frame)) {
 				// new resolution
 				assert(!mpi.frm_grp);
-                initialize_output_buffers2(frame);
+                initialize_output_buffers_ion(frame);
 			} else {
 				// regular frame received
 				if (!mpi.first_frame_ts.tv_sec) {
