@@ -226,7 +226,6 @@ void initialize_output_buffers2(MppFrame  frame){
         info.type =  MPP_BUFFER_TYPE_ION;
         info.size = dmcd.width*dmcd.height;
         info.index = i;
-
         /*int DRMHandle=dph.handle;
         int drm_buf_size = dmcd.width*dmcd.height * 3 /2;
         void* mapped_fb = mmap(
