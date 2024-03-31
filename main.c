@@ -143,7 +143,7 @@ void initialize_output_buffers(MppFrame  frame){
             memset(&info, 0, sizeof(info));
             info.type = MPP_BUFFER_TYPE_DRM;
             info.size = dmcd.width*dmcd.height;
-            //Yinfo.fd = dph.fd;
+            info.fd = dph.fd;
             ret = mpp_buffer_commit(mpi.frm_grp, &info);
             assert(!ret);
             mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
