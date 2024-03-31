@@ -218,7 +218,7 @@ void *__FRAME_THREAD__(void *param)
 					for (i=0; i<MAX_FRAMES; i++) {
 						if (mpi.frame_to_drm[i].prime_fd == info.fd) break;
 					}
-					//assert(i!=MAX_FRAMES);
+					assert(i!=MAX_FRAMES);
 
 					ts = ats;
 					frid++;
