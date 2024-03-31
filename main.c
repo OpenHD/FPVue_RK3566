@@ -226,7 +226,7 @@ void initialize_output_buffers2(MppFrame  frame){
         info.type =  MPP_BUFFER_TYPE_ION;
         info.size = dmcd.width*dmcd.height;
 
-        int drm_buf_size = dmcd.width*dmcd.height;
+        int drm_buf_size = dmcd.width*dmcd.height * 3 /2;
         void* mapped_fb = mmap(
                 0, drm_buf_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
@@ -237,7 +237,7 @@ void initialize_output_buffers2(MppFrame  frame){
                     strerror(ret), ret,
                     mapped_fb
             );
-            return;
+            assert(false);
         }
 
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
