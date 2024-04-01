@@ -229,6 +229,19 @@ void initialize_output_buffers_ion(MppFrame  frame){
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         lol_width=dmcd.width;
         lol_height=dmcd.height;
+        // allocate DRM FB from DRM buffer
+        uint32_t handles[4], pitches[4], offsets[4];
+        memset(handles, 0, sizeof(handles));
+        memset(pitches, 0, sizeof(pitches));
+        memset(offsets, 0, sizeof(offsets));
+        handles[0] = mpi.frame_to_drm[i].handle;
+        offsets[0] = 0;
+        pitches[0] = hor_stride;
+        handles[1] = mpi.frame_to_drm[i].handle;
+        offsets[1] = pitches[0] * ver_stride;
+        pitches[1] = pitches[0];
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
+        assert(!ret);
     }
     first_framebuffer_id=drm_prime_buffers[0];
     for (i=0; i<16; i++) {
@@ -259,19 +272,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
             ret = close(dph.fd);
             assert(!ret);
         }*/
-        // allocate DRM FB from DRM buffer
-        /*uint32_t handles[4], pitches[4], offsets[4];
-        memset(handles, 0, sizeof(handles));
-        memset(pitches, 0, sizeof(pitches));
-        memset(offsets, 0, sizeof(offsets));
-        handles[0] = mpi.frame_to_drm[i].handle;
-        offsets[0] = 0;
-        pitches[0] = hor_stride;
-        handles[1] = mpi.frame_to_drm[i].handle;
-        offsets[1] = pitches[0] * ver_stride;
-        pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
-        assert(!ret);*/
     }
 
     // register external frame group
