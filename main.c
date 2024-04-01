@@ -255,7 +255,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
                     strerror(ret), ret,
                     framebuf
             );
-            return;
+            assert(false);
         }
         mpi.frame_to_drm[i].memory_mmap=framebuf;
     }
