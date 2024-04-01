@@ -200,7 +200,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
 
     int lol_width=0;
     int lol_height=0;
-    for(i=0;i<1;i++){
+    for(i=0;i<2;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
         memset(&dmcd, 0, sizeof(dmcd));
@@ -242,6 +242,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         assert(!ret);
     }
     int first_framebuffer_prime_fd=mpi.frame_to_drm[0].prime_fd;
+    int second_framebuffer_prime_fd=mpi.frame_to_drm[1].prime_fd;
     for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
@@ -264,7 +265,11 @@ void initialize_output_buffers_ion(MppFrame  frame){
         }*/
         //info.fd = dph.fd;
         //info.fd=mpi.frame_to_drm[i].prime_fd;
-        info.fd=first_framebuffer_prime_fd;
+        if(i % 2==0){
+            info.fd=first_framebuffer_prime_fd;
+        }else{
+            info.fd=second_framebuffer_prime_fd;
+        }
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         /*if (dph.fd != info.fd) {
