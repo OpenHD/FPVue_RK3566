@@ -323,7 +323,6 @@ void *__FRAME_THREAD__(void *param)
 
 				MppBuffer buffer = mpp_frame_get_buffer(frame);					
 				if (buffer) {
-                    continue;
                     //printf("Got frame\n");
 					output_list->video_poc = mpp_frame_get_poc(frame);
 					// find fb_id by frame prime_fd
@@ -333,6 +332,7 @@ void *__FRAME_THREAD__(void *param)
 					for (i=0; i<MAX_FRAMES; i++) {
 						if (mpi.frame_to_drm[i].prime_fd == info.fd) break;
 					}
+                    i=0;
 					assert(i!=MAX_FRAMES);
 
 					ts = ats;
