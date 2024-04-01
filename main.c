@@ -197,8 +197,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
     assert(!mpi.frm_grp);
     ret = mpp_buffer_group_get_external(&mpi.frm_grp,  MPP_BUFFER_TYPE_ION);
     assert(!ret);
-    int first_framebuffer_id;
-    bool first_framebuffer_set=false;
 
     int lol_width=0;
     int lol_height=0;
@@ -243,6 +241,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
+    int first_framebuffer_prime_fd=mpi.frame_to_drm[0].prime_fd;
     for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
@@ -264,7 +263,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
             assert(false);
         }*/
         //info.fd = dph.fd;
-        info.fd=mpi.frame_to_drm[i].prime_fd;
+        //info.fd=mpi.frame_to_drm[i].prime_fd;
+        info.fd=first_framebuffer_prime_fd;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         /*if (dph.fd != info.fd) {
@@ -312,8 +312,8 @@ void *__FRAME_THREAD__(void *param)
 			if (mpp_frame_get_info_change(frame)) {
 				// new resolution
 				assert(!mpi.frm_grp);
-                initialize_output_buffers(frame);
-                //initialize_output_buffers_ion(frame);
+                //initialize_output_buffers(frame);
+                initialize_output_buffers_ion(frame);
 			} else {
 				// regular frame received
 				if (!mpi.first_frame_ts.tv_sec) {
