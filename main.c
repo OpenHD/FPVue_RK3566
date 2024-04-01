@@ -132,14 +132,8 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        MppBufferInfo info;
-        memset(&info, 0, sizeof(info));
-        info.type = MPP_BUFFER_TYPE_DRM;
-        info.size = dmcd.width*dmcd.height;
-        info.fd = dph.fd;
-        ret = mpp_buffer_commit(mpi.frm_grp, &info);
-        assert(!ret);
-        mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
+
+        mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         /*if (dph.fd != info.fd) {
             ret = close(dph.fd);
             assert(!ret);
@@ -156,6 +150,14 @@ void initialize_output_buffers(MppFrame  frame){
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
+        assert(!ret);
+        // XX
+        MppBufferInfo info;
+        memset(&info, 0, sizeof(info));
+        info.type = MPP_BUFFER_TYPE_DRM;
+        info.size = dmcd.width*dmcd.height;
+        info.fd = dph.fd;
+        ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
     }
 
