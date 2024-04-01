@@ -200,6 +200,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
 
     int lol_width=0;
     int lol_height=0;
+    // Specify how many actual buffer(s) to create
     int n_drm_prime_buffers=6;
     for(i=0;i<n_drm_prime_buffers;i++){
         // new DRM buffer
@@ -242,8 +243,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
-    int first_framebuffer_prime_fd=mpi.frame_to_drm[0].prime_fd;
-    int second_framebuffer_prime_fd=mpi.frame_to_drm[1].prime_fd;
+    // Can be different than n drm prime buffers.
+    // If for example only one drm prime buffer was created, we pass the same buffer fd to mpp on each mpp buffer.
     for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
