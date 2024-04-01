@@ -200,7 +200,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
 
     int lol_width=0;
     int lol_height=0;
-    for(i=0;i<16;i++){
+    for(i=0;i<1;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
         memset(&dmcd, 0, sizeof(dmcd));
@@ -312,8 +312,11 @@ void *__FRAME_THREAD__(void *param)
 			if (mpp_frame_get_info_change(frame)) {
 				// new resolution
 				assert(!mpi.frm_grp);
-                //initialize_output_buffers(frame);
-                initialize_output_buffers_ion(frame);
+                if(develop_rendering_mode==10){
+                    initialize_output_buffers_ion(frame);
+                }else{
+                    initialize_output_buffers(frame);
+                }
 			} else {
 				// regular frame received
 				if (!mpi.first_frame_ts.tv_sec) {
@@ -325,29 +328,32 @@ void *__FRAME_THREAD__(void *param)
 				if (buffer) {
                     //printf("Got frame\n");
 					output_list->video_poc = mpp_frame_get_poc(frame);
-					// find fb_id by frame prime_fd
-					MppBufferInfo info;
-					ret = mpp_buffer_info_get(buffer, &info);
-					assert(!ret);
-					for (i=0; i<MAX_FRAMES; i++) {
-						if (mpi.frame_to_drm[i].prime_fd == info.fd) break;
-					}
-                    i=0;
-					assert(i!=MAX_FRAMES);
+                    if(develop_rendering_mode==10){
+                        // Never commit anything in the display thread
+                    }else{
+                        // find fb_id by frame prime_fd
+                        MppBufferInfo info;
+                        ret = mpp_buffer_info_get(buffer, &info);
+                        assert(!ret);
+                        for (i=0; i<MAX_FRAMES; i++) {
+                            if (mpi.frame_to_drm[i].prime_fd == info.fd) break;
+                        }
+                        i=0;
+                        assert(i!=MAX_FRAMES);
 
-					ts = ats;
-					frid++;
-					
-					// send DRM FB to display thread
-					ret = pthread_mutex_lock(&video_mutex);
-					assert(!ret);
-					if (output_list->video_fb_id) output_list->video_skipped_frames++;
-					output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
-					ret = pthread_cond_signal(&video_cond);
-					assert(!ret);
-					ret = pthread_mutex_unlock(&video_mutex);
-					assert(!ret);
-					
+                        ts = ats;
+                        frid++;
+
+                        // send DRM FB to display thread
+                        ret = pthread_mutex_lock(&video_mutex);
+                        assert(!ret);
+                        if (output_list->video_fb_id) output_list->video_skipped_frames++;
+                        output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
+                        ret = pthread_cond_signal(&video_cond);
+                        assert(!ret);
+                        ret = pthread_mutex_unlock(&video_mutex);
+                        assert(!ret);
+                    }
 				}
 			}
 			
