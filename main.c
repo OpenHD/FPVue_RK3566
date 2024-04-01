@@ -201,7 +201,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
     int lol_width=0;
     int lol_height=0;
     // Specify how many actual buffer(s) to create
-    int n_drm_prime_buffers=6;
+    int n_drm_prime_buffers=1;
     for(i=0;i<n_drm_prime_buffers;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
