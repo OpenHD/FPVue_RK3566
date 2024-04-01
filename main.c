@@ -258,7 +258,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         if (this_drm_prime_fd != info.fd) {
-            printf("Buffer changed from %d to %d by mpp\n",this_drm_prime_fd,info.fd);
+            // I have no idea why this happens ...
+            printf("mpp changed buffer fd from %d to %d\n",this_drm_prime_fd,info.fd);
         }
     }
 
