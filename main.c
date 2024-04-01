@@ -140,10 +140,10 @@ void initialize_output_buffers(MppFrame  frame){
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
-        if (dph.fd != info.fd) {
+        /*if (dph.fd != info.fd) {
             ret = close(dph.fd);
             assert(!ret);
-        }
+        }*/
         // allocate DRM FB from DRM buffer
         uint32_t handles[4], pitches[4], offsets[4];
         memset(handles, 0, sizeof(handles));
