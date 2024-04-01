@@ -135,19 +135,6 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        void* framebuf=mmap(
-                0, dmcd.width*dmcd.height,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                dph.fd, 0);
-        if (framebuf == NULL || framebuf == MAP_FAILED) {
-            printf(
-                    "Could not map buffer exported through PRIME : %s (%d)\n"
-                    "Buffer : %p\n",
-                    strerror(ret), ret,
-                    framebuf
-            );
-            return;
-        }
-        mpi.frame_to_drm[i].memory_mmap=framebuf;
 
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
@@ -257,6 +244,20 @@ void initialize_output_buffers_ion(MppFrame  frame){
         pitches[1] = pitches[0];
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
+        //
+        void* framebuf=mmap(
+                0, dmcd.width*dmcd.height,    PROT_READ | PROT_WRITE, MAP_SHARED,
+                dph.fd, 0);
+        if (framebuf == NULL || framebuf == MAP_FAILED) {
+            printf(
+                    "Could not map buffer exported through PRIME : %s (%d)\n"
+                    "Buffer : %p\n",
+                    strerror(ret), ret,
+                    framebuf
+            );
+            return;
+        }
+        mpi.frame_to_drm[i].memory_mmap=framebuf;
     }
     // Can be different than n drm prime buffers.
     // If for example only one drm prime buffer was created, we pass the same buffer fd to mpp on each mpp buffer.
