@@ -45,8 +45,6 @@
 
 #define CODEC_ALIGN(x, a)   (((x)+(a)-1)&~((a)-1))
 
-#define WEIRD_ION_FRAMEBUFFERS 8;
-
 struct {
 	MppCtx		  ctx;
 	MppApi		  *mpi;
@@ -199,8 +197,9 @@ void initialize_output_buffers_ion(MppFrame  frame){
     assert(!ret);
     int first_framebuffer_id;
     bool first_framebuffer_set=false;
-    for (i=0; i<MAX_FRAMES; i++) {
 
+    int drm_prime_buffers[30];
+    for(i=0;i<1;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
         memset(&dmcd, 0, sizeof(dmcd));
@@ -224,9 +223,11 @@ void initialize_output_buffers_ion(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        if(!first_framebuffer_set){
-            first_framebuffer_id= dph.fd;
-        }
+        drm_prime_buffers[i]=dph.fd;
+        mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
+    }
+    first_framebuffer_id=drm_prime_buffers[0];
+    for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
         info.type =  MPP_BUFFER_TYPE_ION;
@@ -250,11 +251,10 @@ void initialize_output_buffers_ion(MppFrame  frame){
         info.fd=first_framebuffer_id;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
-        mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
-        if (dph.fd != info.fd) {
+        /*if (dph.fd != info.fd) {
             ret = close(dph.fd);
             assert(!ret);
-        }
+        }*/
         // allocate DRM FB from DRM buffer
         /*uint32_t handles[4], pitches[4], offsets[4];
         memset(handles, 0, sizeof(handles));
