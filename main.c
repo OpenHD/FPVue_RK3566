@@ -200,7 +200,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
 
     int lol_width=0;
     int lol_height=0;
-    for(i=0;i<2;i++){
+    int n_drm_prime_buffers=4;
+    for(i=0;i<n_drm_prime_buffers;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
         memset(&dmcd, 0, sizeof(dmcd));
@@ -265,11 +266,9 @@ void initialize_output_buffers_ion(MppFrame  frame){
         }*/
         //info.fd = dph.fd;
         //info.fd=mpi.frame_to_drm[i].prime_fd;
-        if(i % 2==0){
-            info.fd=first_framebuffer_prime_fd;
-        }else{
-            info.fd=second_framebuffer_prime_fd;
-        }
+        // We pass the same buffer multiple time(s) if needed
+        int buffer_index = i % n_drm_prime_buffers;
+        info.fd = mpi.frame_to_drm[buffer_index].prime_fd;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         /*if (dph.fd != info.fd) {
@@ -315,7 +314,8 @@ void *__FRAME_THREAD__(void *param)
 		clock_gettime(CLOCK_MONOTONIC, &ats);
 		if (frame) {
 			if (mpp_frame_get_info_change(frame)) {
-				// new resolution
+				// NOTE: This assertion will fail if the resolution has changed during decode - right now that's what we want since
+                // it is the easiest way to break out (and restart, with the new resolution)
 				assert(!mpi.frm_grp);
                 if(develop_rendering_mode==10){
                     initialize_output_buffers_ion(frame);
