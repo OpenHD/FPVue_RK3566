@@ -237,7 +237,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
                     "Could not map buffer exported through PRIME : %s (%d)\n"
                     "Buffer : %p\n",
                     strerror(ret), ret,
-                    framebuf
+                    primed_framebuffer
             );
             assert(false);
         }
