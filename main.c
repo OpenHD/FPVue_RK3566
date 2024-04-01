@@ -86,7 +86,6 @@ void initialize_output_buffers(MppFrame  frame){
     int i;
     // new resolution
     assert(!mpi.frm_grp);
-
     output_list->video_frm_width = CODEC_ALIGN(mpp_frame_get_width(frame),16);
     output_list->video_frm_height = CODEC_ALIGN(mpp_frame_get_height(frame),16);
     RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
@@ -103,10 +102,12 @@ void initialize_output_buffers(MppFrame  frame){
 
     osd_vars.video_width = output_list->video_frm_width;
     osd_vars.video_height = output_list->video_frm_height;
+
     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
     assert(!mpi.frm_grp);
     ret = mpp_buffer_group_get_external(&mpi.frm_grp, MPP_BUFFER_TYPE_DRM);
     assert(!ret);
+
     for (i=0; i<MAX_FRAMES; i++) {
 
         // new DRM buffer
@@ -132,12 +133,19 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-
-        mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
-        /*if (dph.fd != info.fd) {
+        MppBufferInfo info;
+        memset(&info, 0, sizeof(info));
+        info.type = MPP_BUFFER_TYPE_DRM;
+        info.size = dmcd.width*dmcd.height;
+        info.fd = dph.fd;
+        ret = mpp_buffer_commit(mpi.frm_grp, &info);
+        assert(!ret);
+        mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
+        if (dph.fd != info.fd) {
             ret = close(dph.fd);
             assert(!ret);
-        }*/
+        }
+
         // allocate DRM FB from DRM buffer
         uint32_t handles[4], pitches[4], offsets[4];
         memset(handles, 0, sizeof(handles));
@@ -151,14 +159,6 @@ void initialize_output_buffers(MppFrame  frame){
         pitches[1] = pitches[0];
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
-        // XX
-        MppBufferInfo info;
-        memset(&info, 0, sizeof(info));
-        info.type = MPP_BUFFER_TYPE_DRM;
-        info.size = dmcd.width*dmcd.height;
-        info.fd = dph.fd;
-        ret = mpp_buffer_commit(mpi.frm_grp, &info);
-        assert(!ret);
     }
 
     // register external frame group
@@ -167,7 +167,6 @@ void initialize_output_buffers(MppFrame  frame){
 
     ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
     assert(ret >= 0);
-
 }
 
 // TODO: Peteify ...
