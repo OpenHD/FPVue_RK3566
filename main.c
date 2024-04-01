@@ -169,7 +169,7 @@ void initialize_output_buffers(MppFrame  frame){
     assert(ret >= 0);
 }
 
-// TODO: Peteify ...
+// 'Live buffer hack'
 void initialize_output_buffers_ion(MppFrame  frame){
     int ret;
     int i;
