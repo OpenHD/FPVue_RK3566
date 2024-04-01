@@ -198,10 +198,9 @@ void initialize_output_buffers_ion(MppFrame  frame){
     int first_framebuffer_id;
     bool first_framebuffer_set=false;
 
-    int drm_prime_buffers[30];
     int lol_width=0;
     int lol_height=0;
-    for(i=0;i<1;i++){
+    for(i=0;i<16;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
         memset(&dmcd, 0, sizeof(dmcd));
@@ -225,7 +224,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        drm_prime_buffers[i]=dph.fd;
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         lol_width=dmcd.width;
         lol_height=dmcd.height;
@@ -265,7 +263,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
             assert(false);
         }*/
         //info.fd = dph.fd;
-        info.fd=first_framebuffer_id;
+        info.fd=mpi.frame_to_drm[i].prime_fd;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
         /*if (dph.fd != info.fd) {
