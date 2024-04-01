@@ -56,6 +56,8 @@ struct {
 		int prime_fd;
 		int fb_id;
 		uint32_t handle;
+        // only used in copy mode
+        void* memory_mmap;
 	} frame_to_drm[MAX_FRAMES];
 } mpi;
 
@@ -133,6 +135,20 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
+        void* framebuf=mmap(
+                0, dmcd.width*dmcd.height,    PROT_READ | PROT_WRITE, MAP_SHARED,
+                dph.fd, 0);
+        if (framebuf == NULL || framebuf == MAP_FAILED) {
+            printf(
+                    "Could not map buffer exported through PRIME : %s (%d)\n"
+                    "Buffer : %p\n",
+                    strerror(ret), ret,
+                    framebuf
+            );
+            return;
+        }
+        mpi.frame_to_drm[i].memory_mmap=framebuf;
+
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
         info.type = MPP_BUFFER_TYPE_DRM;
