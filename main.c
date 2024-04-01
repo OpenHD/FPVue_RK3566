@@ -199,6 +199,8 @@ void initialize_output_buffers_ion(MppFrame  frame){
     bool first_framebuffer_set=false;
 
     int drm_prime_buffers[30];
+    int lol_width=0;
+    int lol_height=0;
     for(i=0;i<1;i++){
         // new DRM buffer
         struct drm_mode_create_dumb dmcd;
@@ -225,13 +227,15 @@ void initialize_output_buffers_ion(MppFrame  frame){
         assert(!ret);
         drm_prime_buffers[i]=dph.fd;
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
+        lol_width=dmcd.width;
+        lol_height=dmcd.height;
     }
     first_framebuffer_id=drm_prime_buffers[0];
     for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
         info.type =  MPP_BUFFER_TYPE_ION;
-        info.size = dmcd.width*dmcd.height;
+        info.size = lol_width*lol_height;
         info.index = i;
         /*int DRMHandle=dph.handle;
         int drm_buf_size = dmcd.width*dmcd.height * 3 /2;
