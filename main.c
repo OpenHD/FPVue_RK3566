@@ -241,7 +241,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
         ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
-    first_framebuffer_id=drm_prime_buffers[0];
     for (i=0; i<16; i++) {
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
