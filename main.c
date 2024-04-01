@@ -251,31 +251,15 @@ void initialize_output_buffers_ion(MppFrame  frame){
         info.type =  MPP_BUFFER_TYPE_ION;
         info.size = lol_width*lol_height;
         info.index = i;
-        /*int DRMHandle=dph.handle;
-        int drm_buf_size = dmcd.width*dmcd.height * 3 /2;
-        void* mapped_fb = mmap(
-                0, drm_buf_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                DRMHandle, 0);
-        if (mapped_fb == NULL || mapped_fb == MAP_FAILED) {
-            printf(
-                    "Could not map buffer exported through PRIME : %s (%d)\n"
-                    "Buffer : %p\n",
-                    strerror(ret), ret,
-                    mapped_fb
-            );
-            assert(false);
-        }*/
-        //info.fd = dph.fd;
-        //info.fd=mpi.frame_to_drm[i].prime_fd;
         // We pass the same buffer multiple time(s) if needed
         int buffer_index = i % n_drm_prime_buffers;
-        info.fd = mpi.frame_to_drm[buffer_index].prime_fd;
+        int this_drm_prime_fd=mpi.frame_to_drm[buffer_index].prime_fd;
+        info.fd = this_drm_prime_fd;
         ret = mpp_buffer_commit(mpi.frm_grp, &info);
         assert(!ret);
-        /*if (dph.fd != info.fd) {
-            ret = close(dph.fd);
-            assert(!ret);
-        }*/
+        if (this_drm_prime_fd != info.fd) {
+            printf("Buffer changed from %d to %d by mpp\n",this_drm_prime_fd,info.fd);
+        }
     }
 
     // register external frame group
