@@ -229,10 +229,10 @@ void initialize_output_buffers_ion(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        void* framebuf=mmap(
+        uint8_t * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
-        if (framebuf == NULL || framebuf == MAP_FAILED) {
+        if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
             printf(
                     "Could not map buffer exported through PRIME : %s (%d)\n"
                     "Buffer : %p\n",
@@ -241,7 +241,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
             );
             assert(false);
         }
-        mpi.frame_to_drm[i].memory_mmap=framebuf;
+        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         //
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         lol_width=dmcd.width;
