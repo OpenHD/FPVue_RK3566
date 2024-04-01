@@ -132,7 +132,7 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        mpi.frame_to_drm[i].prime_fd = info.fd; // dups fd
+        mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         // allocate DRM FB from DRM buffer
         uint32_t handles[4], pitches[4], offsets[4];
         memset(handles, 0, sizeof(handles));
