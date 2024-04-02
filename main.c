@@ -99,6 +99,13 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
+    // First, do the memset
+    uint64_t before_memset=get_time_ms();
+    char lol=get_time_ms() % 255;
+    memset(dst_p,lol,memory_size);
+    uint64_t elapsed_memset=get_time_ms()-before;
+    print_time_ms("mmap_copy_unmap memset took",elapsed_memset);
+
     //memcpy(dst_p,src_p,memory_size);
     memcpy_threaded(dst_p,src_p,memory_size,2);
     char lol=get_time_ms() % 255;
