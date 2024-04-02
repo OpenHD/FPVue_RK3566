@@ -131,10 +131,27 @@ void initialize_output_buffers(MppFrame  frame){
         memset(&dph, 0, sizeof(struct drm_prime_handle));
         dph.handle = dmcd.handle;
         dph.fd = -1;
+        // added for mmap
+        dph.flags  = DRM_CLOEXEC | DRM_RDWR;
         do {
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
+        //
+        uint8_t * primed_framebuffer=mmap(
+                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
+                dph.fd, 0);
+        if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
+            printf(
+                    "Could not map buffer exported through PRIME : %s (%d)\n"
+                    "Buffer : %p\n",
+                    strerror(ret), ret,
+                    primed_framebuffer
+            );
+            assert(false);
+        }
+        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
+        //
 
         MppBufferInfo info;
         memset(&info, 0, sizeof(info));
