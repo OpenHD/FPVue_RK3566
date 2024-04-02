@@ -224,12 +224,13 @@ void initialize_output_buffers_ion(MppFrame  frame){
         memset(&dph, 0, sizeof(struct drm_prime_handle));
         dph.handle = dmcd.handle;
         dph.fd = -1;
+        dph.flags  = DRM_CLOEXEC | DRM_RDWR,
         do {
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        /*uint8_t * primed_framebuffer=mmap(
+        uint8_t * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -241,7 +242,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
             );
             assert(false);
         }
-        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;*/
+        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         //
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         lol_width=dmcd.width;
