@@ -107,10 +107,10 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
-    memcpy(dst_p,src_p,memory_size/2);
+    memcpy(dst_p,src_p,memory_size);
     //memcpy_test(dst_p,src_p,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
-    print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
+    print_time_ms("mmap_copy_unmap %d took %d \n",memory_size,elapsed_memcpy);
 }
 
 void initialize_output_buffers(MppFrame  frame){
@@ -409,7 +409,7 @@ void *__FRAME_THREAD__(void *param)
                                 memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
                                 int fd_src=mpi.frame_to_drm[i].prime_fd;
                                 int fd_dst=mpi.frame_to_drm[0].prime_fd;
-                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size);
+                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size/4);
                             }
                             uint64_t elapsed_memcpy=get_time_ms()-before;
                             print_time_ms("memcpy took",elapsed_memcpy);
