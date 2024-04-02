@@ -437,7 +437,15 @@ void *__DISPLAY_THREAD__(void *param)
         }else if (develop_rendering_mode==3){
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
                             DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET,NULL);
-        }else{
+        }else if(develop_rendering_mode==4){
+		ret = modeset_perform_modeset(drm_fd, 
+			output_list, output_list->video_request, &output_list->video_plane,
+			fb_id,
+			output_list->video_frm_width,
+			output_list->video_frm_height,
+			video_zpos);
+    		assert(ret >= 0);
+	}else{
             printf("Unknown rendering mdoe\n");
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
