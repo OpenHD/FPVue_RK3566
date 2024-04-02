@@ -87,7 +87,7 @@ int develop_rendering_mode=0;
 
 void memcpy_test(void* dest,void* src, int len){
     for(int i=len;i>0;i--){
-        dest[i]=src[i];
+        ((char*)dest)[i]=((char*)src)[i];
     }
     //memcpy(dst_p,src_p,memory_size);
 }
