@@ -409,7 +409,7 @@ void *__FRAME_THREAD__(void *param)
                                 memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
                                 int fd_src=mpi.frame_to_drm[i].prime_fd;
                                 int fd_dst=mpi.frame_to_drm[0].prime_fd;
-                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size/4);
+                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size/2);
                             }
                             uint64_t elapsed_memcpy=get_time_ms()-before;
                             print_time_ms("memcpy took",elapsed_memcpy);
