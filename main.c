@@ -224,7 +224,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         memset(&dph, 0, sizeof(struct drm_prime_handle));
         dph.handle = dmcd.handle;
         dph.fd = -1;
-        dph.flags  = DRM_CLOEXEC | DRM_RDWR,
+        dph.flags  = DRM_CLOEXEC | DRM_RDWR;
         do {
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
