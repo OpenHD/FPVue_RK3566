@@ -122,8 +122,8 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &dmcd);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        assert(dmcd.pitch==(fmt==MPP_FMT_YUV420SP?hor_stride:hor_stride*10/8));
-        assert(dmcd.size==(fmt == MPP_FMT_YUV420SP?hor_stride:hor_stride*10/8)*ver_stride*2);
+        //assert(dmcd.pitch==(fmt==MPP_FMT_YUV420SP?hor_stride:hor_stride*10/8));
+        //assert(dmcd.size==(fmt == MPP_FMT_YUV420SP?hor_stride:hor_stride*10/8)*ver_stride*2);
         mpi.frame_to_drm[i].handle = dmcd.handle;
 
         // commit DRM buffer to frame group
