@@ -459,7 +459,7 @@ void *__DISPLAY_THREAD__(void *param)
                     fb_id,
                     0,
                     0, 0,
-                    output_list->video_frm_width, output_list->video_frm_height,
+                    output_list->video_crtc_width, output_list->video_crtc_height,
                     0, 0,
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
