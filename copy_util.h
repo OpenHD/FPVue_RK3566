@@ -22,20 +22,23 @@ void* memcpy_data_function(void* args_uncast){
 
 void memcpy_threaded(void* dest,void* src, int len,int n_threads){
     pthread_t threads[100];
+    struct memcpy_args_t memcpyArgs[100];
     int consumed=0;
     int chunck=len/(n_threads);
-    for(int i=0;i<n_threads-1;i++){
-        struct memcpy_args_t memcpyArgs;
-        memcpyArgs.src=src+consumed;
-        memcpyArgs.dst=dest+consumed;
-        memcpyArgs.len=chunck;
-        int iret1 = pthread_create( &threads[i], NULL, &memcpy_data_function, (void*) &memcpyArgs);
+    for(int i=0;i<n_threads;i++){
+        memcpyArgs[i].src=src+consumed;
+        memcpyArgs[i].dst=dest+consumed;
+        if(i==n_threads-1){
+            // might not be even
+            memcpyArgs[i].len=len-consumed;
+        }else{
+            memcpyArgs[i].len=chunck;
+        }
+        int iret1 = pthread_create( &threads[i], NULL, &memcpy_data_function, (void*) &memcpyArgs[i]);
         assert(iret1==0);
         consumed+=chunck;
     }
-    // copy remaining (nth-thread is self)
-    memcpy(dest+consumed,src+consumed,len-consumed);
-    for(int i=0;i<n_threads-1;i++){
+    for(int i=0;i<n_threads;i++){
         pthread_join(threads[i], NULL);
     }
     /*pthread_t thread1;
