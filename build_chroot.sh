@@ -6,9 +6,12 @@ sudo pip3 install --upgrade cloudsmith-cli
 curl -1sLf 'https://dl.cloudsmith.io/public/openhd/release/setup.deb.sh'| sudo -E bash
 apt update
 sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev libcairo-dev
-git clone https://github.com/rockchip-linux/mpp.git
-sudo cmake --build build --target install
 gem install fpm
+
+git clone https://github.com/rockchip-linux/mpp.git
+cd mpp
+sudo cmake --build build --target install
+
 cmake -B build
 sudo cmake --build build --target install
 
