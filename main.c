@@ -110,7 +110,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     memcpy(dst_p,src_p,memory_size);
     //memcpy_test(dst_p,src_p,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
-    print_time_ms("mmap_copy_unmap %d took %d \n",memory_size,elapsed_memcpy);
+    print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
 
 void initialize_output_buffers(MppFrame  frame){
