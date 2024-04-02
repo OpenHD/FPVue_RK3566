@@ -100,9 +100,9 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
         assert(false);
     }
     //memcpy(dst_p,src_p,memory_size);
-    //memcpy_threaded(dst_p,src_p,memory_size,2);
+    memcpy_threaded(dst_p,src_p,memory_size,2);
     char lol=get_time_ms() % 255;
-    memset(dst_p,lol,memory_size);
+    //memset(dst_p,lol,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
