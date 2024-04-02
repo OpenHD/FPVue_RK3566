@@ -67,6 +67,8 @@ struct modeset_output {
 	RK_U32 video_frm_height;
 	int video_fb_x, video_fb_y, video_fb_width, video_fb_height;
 	int video_fb_id;
+    // only used for memcpy
+    int video_fb_index;
 	int video_skipped_frames;
 	int video_poc;
 

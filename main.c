@@ -508,44 +508,22 @@ void *__FRAME_THREAD__(void *param)
                         assert(!ret);
                         for (i=0; i<MAX_FRAMES; i++) {
                             if (mpi.frame_to_drm[i].prime_fd == info.fd) break;
-                                                  uint64_t before=get_time_ms();
-                            if(i!=0){
-                                /*void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
-                                void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
-                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
-                                int fd_src=mpi.frame_to_drm[i].prime_fd;
-                                int fd_dst=mpi.frame_to_drm[0].prime_fd;
-                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size*2/3);
-  }
+                        }
                         assert(i!=MAX_FRAMES);
 
                         ts = ats;
                         frid++;
 
-                        if(develop_rendering_mode==6){
-                            uint64_t before=get_time_ms();
-                            if(i!=0){
-                                /*void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
-                                void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
-                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
-                                int fd_src=mpi.frame_to_drm[i].prime_fd;
-                                int fd_dst=mpi.frame_to_drm[0].prime_fd;
-                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size*2/3);
-                            }
-                            uint64_t elapsed_memcpy=get_time_ms()-before;
-                            print_time_ms("memcpy took",elapsed_memcpy);
-                        }else{
-                            // send DRM FB to display thread
-                            ret = pthread_mutex_lock(&video_mutex);
-                            assert(!ret);
-                            if (output_list->video_fb_id) output_list->video_skipped_frames++;
-                            output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
-                            ret = pthread_cond_signal(&video_cond);
-                            assert(!ret);
-                            ret = pthread_mutex_unlock(&video_mutex);
-                            assert(!ret);
-                        }
-
+                        // send DRM FB to display thread
+                        ret = pthread_mutex_lock(&video_mutex);
+                        assert(!ret);
+                        if (output_list->video_fb_id) output_list->video_skipped_frames++;
+                        output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
+                        output_list->video_fb_index=i;
+                        ret = pthread_cond_signal(&video_cond);
+                        assert(!ret);
+                        ret = pthread_mutex_unlock(&video_mutex);
+                        assert(!ret);
 
                     }
 				}
@@ -571,6 +549,7 @@ void *__DISPLAY_THREAD__(void *param)
 
 	while (!frm_eos) {
 		int fb_id;
+        int fb_index;
 		
 		ret = pthread_mutex_lock(&video_mutex);
 		assert(!ret);
@@ -586,6 +565,7 @@ void *__DISPLAY_THREAD__(void *param)
 		struct timespec ts, ats;
 		clock_gettime(CLOCK_MONOTONIC, &ats);
 		fb_id = output_list->video_fb_id;
+        fb_index=output_list->video_fb_index;
 		if (output_list->video_skipped_frames) 
 			printf("Display skipped %d frame.\n", output_list->video_skipped_frames);
 		output_list->video_fb_id=0;
@@ -662,7 +642,18 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t elapsed_modeset=get_time_ms()-before;
             print_time_ms("drmModeSetPlane took",elapsed_modeset);
         }else if(develop_rendering_mode==6){
-            //
+            // memcpy
+            uint64_t before=get_time_ms();
+            if(fb_index!=0){
+                /*void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
+                void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
+                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
+                int fd_src=mpi.frame_to_drm[fb_index].prime_fd;
+                int fd_dst=mpi.frame_to_drm[0].prime_fd;
+                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size*2/3);
+            }
+            uint64_t elapsed_memcpy=get_time_ms()-before;
+            print_time_ms("memcpy took",elapsed_memcpy);
         }
         else{
             printf("Unknown rendering mdoe\n");
