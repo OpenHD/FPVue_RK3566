@@ -7,6 +7,7 @@ curl -1sLf 'https://dl.cloudsmith.io/public/openhd/release/setup.deb.sh'| sudo -
 apt update
 sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev libcairo-dev
 gem install fpm
+apt upgrade -y
 
 git clone https://github.com/rockchip-linux/mpp.git
 cd mpp
