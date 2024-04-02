@@ -9,7 +9,7 @@ sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev libcair
 gem install fpm
 apt upgrade -y
 
-git clone https://github.com/rockchip-linux/mpp.git
+git clone https://github.com/openhd/mpp.git
 cd mpp
 sudo cmake --build build --target install
 
