@@ -11,6 +11,7 @@ gem install fpm
 git clone https://github.com/rockchip-linux/mpp.git
 cd mpp
 sudo cmake --build build --target install
+
 cd ..
 cmake -B build
 sudo cmake --build build --target install
