@@ -369,15 +369,28 @@ void *__FRAME_THREAD__(void *param)
                         ts = ats;
                         frid++;
 
-                        // send DRM FB to display thread
-                        ret = pthread_mutex_lock(&video_mutex);
-                        assert(!ret);
-                        if (output_list->video_fb_id) output_list->video_skipped_frames++;
-                        output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
-                        ret = pthread_cond_signal(&video_cond);
-                        assert(!ret);
-                        ret = pthread_mutex_unlock(&video_mutex);
-                        assert(!ret);
+                        if(develop_rendering_mode==6){
+                            uint64_t before=get_time_ms();
+                            if(i!=0){
+                                void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
+                                void* out_buffer_p=mpi.frame_to_drm[i].memory_mmap;
+                                memcpy(out_buffer_p,in_buffer_p,1000);
+                            }
+                            uint64_t elapsed_memcpy=get_time_ms()-before;
+                            print_time_ms("memcpy took",elapsed_memcpy);
+                        }else{
+                            // send DRM FB to display thread
+                            ret = pthread_mutex_lock(&video_mutex);
+                            assert(!ret);
+                            if (output_list->video_fb_id) output_list->video_skipped_frames++;
+                            output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
+                            ret = pthread_cond_signal(&video_cond);
+                            assert(!ret);
+                            ret = pthread_mutex_unlock(&video_mutex);
+                            assert(!ret);
+                        }
+
+
                     }
 				}
 			}
@@ -492,6 +505,8 @@ void *__DISPLAY_THREAD__(void *param)
             );
             uint64_t elapsed_modeset=get_time_ms()-before;
             print_time_ms("drmModeSetPlane took",elapsed_modeset);
+        }else if(develop_rendering_mode==6){
+            //
         }
         else{
             printf("Unknown rendering mdoe\n");
