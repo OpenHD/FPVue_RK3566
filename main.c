@@ -103,7 +103,7 @@ void memcpy_threaded(void* dest,void* src, int len){
     memcpyArgs.len=len_first;
     int iret1 = pthread_create( &thread1, NULL, &memcpy_data_function, (void*) &memcpyArgs);
     assert(iret1==0);
-    memcpy(src+len_first,dest+len_first,len_second);
+    memcpy(dest+len_first,src+len_first,len_second);
     pthread_join(thread1, NULL);
 }
 
