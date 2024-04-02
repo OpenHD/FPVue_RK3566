@@ -58,6 +58,7 @@ struct {
 		uint32_t handle;
         // only used in copy mode
         void* memory_mmap;
+        int memory_mmap_size;
 	} frame_to_drm[MAX_FRAMES];
 } mpi;
 
@@ -151,6 +152,7 @@ void initialize_output_buffers(MppFrame  frame){
             assert(false);
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
+        mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
         //
 
         MppBufferInfo info;
@@ -373,8 +375,8 @@ void *__FRAME_THREAD__(void *param)
                             uint64_t before=get_time_ms();
                             if(i!=0){
                                 void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
-                                void* out_buffer_p=mpi.frame_to_drm[i].memory_mmap;
-                                memcpy(out_buffer_p,in_buffer_p,1000);
+                                void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
+                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size);
                             }
                             uint64_t elapsed_memcpy=get_time_ms()-before;
                             print_time_ms("memcpy took",elapsed_memcpy);
