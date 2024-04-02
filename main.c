@@ -451,6 +451,7 @@ void *__DISPLAY_THREAD__(void *param)
                 video_zpos);
                 assert(ret >= 0);
 	    }else if(develop_rendering_mode==5){
+            uint64_t before=get_time_ms();
             ret = drmModeSetPlane(
                     drm_fd,
                     output_list->video_plane.id,
@@ -462,6 +463,8 @@ void *__DISPLAY_THREAD__(void *param)
                     0, 0,
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
+            uint64_t elapsed_modeset=get_time_ms()-before;
+            print_time_ms("drmModeSetPlane took",elapsed_modeset);
         }
         else{
             printf("Unknown rendering mdoe\n");
