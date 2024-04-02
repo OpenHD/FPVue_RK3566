@@ -12,7 +12,8 @@ set(SOURCE_FILES drm.c
 				osd.c
 				rtp.c
 				mavlink.c
-				main.c)
+				main.c
+        copy_util.h)
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
 

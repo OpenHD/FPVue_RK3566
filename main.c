@@ -37,7 +37,7 @@
 #include "mavlink/common/mavlink.h"
 #include "mavlink.h"
 #include "time_util.h"
-
+#include "copy_util.h"
 
 
 #define READ_BUF_SIZE (1024*1024) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
@@ -83,29 +83,6 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 
-struct memcpy_args_t {
-    void* src;
-    void* dst;
-    int len;
-};
-void* memcpy_data_function(void* args_uncast){
-    struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
-    memcpy(args->dst,args->src,args->len);
-}
-
-void memcpy_threaded(void* dest,void* src, int len){
-    pthread_t thread1;
-    struct memcpy_args_t memcpyArgs;
-    int len_first=len / 2;
-    int len_second=len-len_first;
-    memcpyArgs.src=src;
-    memcpyArgs.dst=dest;
-    memcpyArgs.len=len_first;
-    int iret1 = pthread_create( &thread1, NULL, &memcpy_data_function, (void*) &memcpyArgs);
-    assert(iret1==0);
-    memcpy(dest+len_first,src+len_first,len_second);
-    pthread_join(thread1, NULL);
-}
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     printf("map_copy_unmap\n");
@@ -123,7 +100,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
         assert(false);
     }
     //memcpy(dst_p,src_p,memory_size);
-    memcpy_threaded(dst_p,src_p,memory_size);
+    memcpy_threaded(dst_p,src_p,memory_size,2);
     uint64_t elapsed_memcpy=get_time_ms()-before;
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
