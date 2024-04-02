@@ -99,7 +99,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
-    memcpy(src_p,dst_p,memory_size);
+    memcpy(dst_p,src_p,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
