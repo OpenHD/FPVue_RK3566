@@ -376,7 +376,7 @@ void *__FRAME_THREAD__(void *param)
                             if(i!=0){
                                 void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
                                 void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
-                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size);
+                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);
                             }
                             uint64_t elapsed_memcpy=get_time_ms()-before;
                             print_time_ms("memcpy took",elapsed_memcpy);
