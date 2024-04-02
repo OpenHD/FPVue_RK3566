@@ -435,8 +435,13 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t elapsed_crtc=get_time_ms()-before;
             print_time_ms("drmModeSetCrtc took",elapsed_crtc);
         }else if (develop_rendering_mode==3){
+            uint64_t before=get_time_ms();
+            bool waiting=true;
+            //DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
-                            DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET,NULL);
+                            DRM_MODE_PAGE_FLIP_EVENT,&waiting);
+            uint64_t elapsed_crtc=get_time_ms()-before;
+            print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
             ret = modeset_perform_modeset(drm_fd,
                 output_list, output_list->video_request, &output_list->video_plane,
