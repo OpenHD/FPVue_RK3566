@@ -28,16 +28,19 @@ void memcpy_threaded(void* dest,void* src, int len,int n_threads){
     for(int i=0;i<n_threads;i++){
         memcpyArgs[i].src=src+consumed;
         memcpyArgs[i].dst=dest+consumed;
+        int this_thread_len;
         if(i==n_threads-1){
             // might not be even
-            memcpyArgs[i].len=len-consumed;
+            this_thread_len=len-consumed;
         }else{
-            memcpyArgs[i].len=chunck;
+            this_thread_len=chunck;
         }
+        memcpyArgs[i].len=this_thread_len;
         int iret1 = pthread_create( &threads[i], NULL, &memcpy_data_function, (void*) &memcpyArgs[i]);
         assert(iret1==0);
-        consumed+=chunck;
+        consumed+=this_thread_len;
     }
+    assert(consumed==len);
     for(int i=0;i<n_threads;i++){
         pthread_join(threads[i], NULL);
     }
