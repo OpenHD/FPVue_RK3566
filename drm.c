@@ -568,7 +568,7 @@ int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq
 	}
 
 	/* initial modeset on all outputs */
-	flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+	flags = DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_PAGE_FLIP_ASYNC;
 	ret = drmModeAtomicCommit(fd, req, flags, NULL);
 	if (ret < 0)
 		fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
