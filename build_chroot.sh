@@ -16,7 +16,8 @@ cd build/linux/aarch64
 ./make-Makefiles.bash
 make -j4 install
 
-cd ..
+cd ../../../../
+ls
 cmake -B build
 sudo cmake --build build --target install
 
