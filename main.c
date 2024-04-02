@@ -439,7 +439,7 @@ void *__DISPLAY_THREAD__(void *param)
             bool waiting=true;
             //DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
-                            0,&waiting);
+                            DRM_MODE_PAGE_FLIP_ASYNC,&waiting);
             uint64_t elapsed_crtc=get_time_ms()-before;
             print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
