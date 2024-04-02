@@ -10,8 +10,10 @@ gem install fpm
 
 git clone https://github.com/openhd/mpp.git --recursive
 cd mpp
-rm CMakeLists.txt
-cmake -B build
+sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev mlocate openhd qopenhd-rk3566 apt-transport-https apt-utils open-hd-web-ui
+gem install fpm
+cd build/linux/aarch64
+./make-Makefiles.bash
 sudo cmake --build build --target install
 
 cd ..
