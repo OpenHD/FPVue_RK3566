@@ -339,6 +339,124 @@ void initialize_output_buffers_ion(MppFrame  frame){
 
 }
 
+MppBufferGroup dec_buf_mgr_setup(DecBufMgr mgr, RK_U32 size, RK_U32 count, MppDecBufMode mode)
+{
+    DecBufMgrImpl *impl = (DecBufMgrImpl *)mgr;
+    MPP_RET ret = MPP_NOK;
+
+    if (!impl)
+        return NULL;
+
+    /* cleanup old buffers if previous buffer group exists */
+    if (impl->group) {
+        if (mode != impl->buf_mode) {
+            /* switch to different buffer mode just release old buffer group */
+            mpp_buffer_group_put(impl->group);
+            impl->group = NULL;
+        } else {
+            /* otherwise just cleanup old buffers */
+            mpp_buffer_group_clear(impl->group);
+        }
+
+        /* if there are external mode old buffers do cleanup */
+        if (impl->bufs) {
+            RK_U32 i;
+
+            for (i = 0; i < impl->buf_count; i++) {
+                if (impl->bufs[i]) {
+                    mpp_buffer_put(impl->bufs[i]);
+                    impl->bufs[i] = NULL;
+                }
+            }
+
+            MPP_FREE(impl->bufs);
+        }
+    }
+
+    switch (mode) {
+        case MPP_DEC_BUF_HALF_INT : {
+            /* reuse previous half internal buffer group and just reconfig limit */
+            if (NULL == impl->group) {
+                ret = mpp_buffer_group_get_internal(&impl->group, MPP_BUFFER_TYPE_ION);
+                if (ret) {
+                    mpp_err_f("get mpp internal buffer group failed ret %d\n", ret);
+                    break;
+                }
+            }
+            /* Use limit config to limit buffer count and buffer size */
+            ret = mpp_buffer_group_limit_config(impl->group, size, count);
+            if (ret) {
+                mpp_err_f("limit buffer group failed ret %d\n", ret);
+            }
+        } break;
+        case MPP_DEC_BUF_INTERNAL : {
+            /* do nothing juse keep buffer group empty */
+            mpp_assert(NULL == impl->group);
+            ret = MPP_OK;
+        } break;
+        case MPP_DEC_BUF_EXTERNAL : {
+            RK_U32 i;
+            MppBufferInfo commit;
+
+            impl->bufs = mpp_calloc(MppBuffer, count);
+            if (!impl->bufs) {
+                mpp_err_f("create %d external buffer record failed\n", count);
+                break;
+            }
+
+            /* reuse previous external buffer group */
+            if (NULL == impl->group) {
+                ret = mpp_buffer_group_get_external(&impl->group, MPP_BUFFER_TYPE_ION);
+                if (ret) {
+                    mpp_err_f("get mpp external buffer group failed ret %d\n", ret);
+                    break;
+                }
+            }
+
+            /*
+             * NOTE: Use default misc allocater here as external allocator for demo.
+             * But in practical case the external buffer could be GraphicBuffer or gst dmabuf.
+             * The misc allocator will cause the print at the end like:
+             * ~MppBufferService cleaning misc group
+             */
+            commit.type = MPP_BUFFER_TYPE_ION;
+            commit.size = size;
+
+            for (i = 0; i < count; i++) {
+                ret = mpp_buffer_get(NULL, &impl->bufs[i], size);
+                if (ret || NULL == impl->bufs[i]) {
+                    mpp_err_f("get misc buffer failed ret %d\n", ret);
+                    break;
+                }
+
+                commit.index = i;
+                commit.ptr = mpp_buffer_get_ptr(impl->bufs[i]);
+                commit.fd = mpp_buffer_get_fd(impl->bufs[i]);
+
+                ret = mpp_buffer_commit(impl->group, &commit);
+                if (ret) {
+                    mpp_err_f("external buffer commit failed ret %d\n", ret);
+                    break;
+                }
+            }
+        } break;
+        default : {
+            mpp_err_f("unsupport buffer mode %d\n", mode);
+        } break;
+    }
+
+    if (ret) {
+        dec_buf_mgr_deinit(impl);
+        impl = NULL;
+    } else {
+        impl->buf_count = count;
+        impl->buf_size = size;
+        impl->buf_mode = mode;
+    }
+
+    return impl ? impl->group : NULL;
+}
+
 // First buffer is the one displayed, but not committed to mpp
 void initialize_output_buffers_memcpy(MppFrame  frame){
     int ret;
