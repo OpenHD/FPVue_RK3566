@@ -451,7 +451,17 @@ void *__DISPLAY_THREAD__(void *param)
                 video_zpos);
                 assert(ret >= 0);
 	    }else if(develop_rendering_mode==5){
-
+            ret = drmModeSetPlane(
+                    drm_fd,
+                    output_list->video_plane.id,
+                    output_list->saved_crtc->crtc_id,
+                    fb_id,
+                    0,
+                    0, 0,
+                    output_list->video_frm_width, output_list->video_frm_height,
+                    0, 0,
+                    ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
+            );
         }
         else{
             printf("Unknown rendering mdoe\n");
