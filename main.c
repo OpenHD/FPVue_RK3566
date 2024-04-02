@@ -427,7 +427,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         }else{
             mpi.frame_to_drm[i].prime_fd =  dph.fd; // dups fd
         }
-        if(i==0){
+       // if(i==0){
             // allocate DRM FB from DRM buffer
             uint32_t handles[4], pitches[4], offsets[4];
             memset(handles, 0, sizeof(handles));
@@ -441,7 +441,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
             pitches[1] = pitches[0];
             ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
             assert(!ret);
-        }
+        //}
     }
 
     // register external frame group
