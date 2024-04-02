@@ -85,6 +85,7 @@ int develop_rendering_mode=0;
 
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
+    printf("map_copy_unmap\n");
     uint64_t before=get_time_ms();
     uint8_t * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
