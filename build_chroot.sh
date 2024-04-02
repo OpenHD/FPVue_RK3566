@@ -18,8 +18,8 @@ make -j4 install
 
 cd ../../../../
 ls
-cmake -B build
-sudo cmake --build build --target install --prefix "/opt/fpv"
+cmake -B build -DCMAKE_INSTALL_PREFIX="/opt/fpv"
+sudo cmake --build build --target install
 
 
 VERSION="1.2-$(date -d '+1 hour' +'%m-%d-%Y--%H-%M-%S')"
