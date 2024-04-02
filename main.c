@@ -182,6 +182,7 @@ void initialize_output_buffers(MppFrame  frame){
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
+        printf("Buffer size bytes %d\n",dmcd.size);
         //
 
         MppBufferInfo info;
