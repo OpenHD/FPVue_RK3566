@@ -645,7 +645,7 @@ void *__DISPLAY_THREAD__(void *param)
                 map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size);
             }
             uint64_t elapsed_memcpy=get_time_ms()-before;
-            print_time_ms("memcpy took",elapsed_memcpy);
+            //print_time_ms("memcpy took",elapsed_memcpy);
         }
         else{
             printf("Unknown rendering mdoe\n");
