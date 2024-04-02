@@ -438,9 +438,15 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t before=get_time_ms();
             bool waiting=true;
             //DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET
+            // ... breaks running qopenhd ...
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
                             DRM_MODE_PAGE_FLIP_ASYNC,&waiting);
             uint64_t elapsed_crtc=get_time_ms()-before;
+            drmEventContext ev;
+            memset(&ev, 0, sizeof(ev));
+            ev.version = DRM_EVENT_CONTEXT_VERSION;
+            ev.page_flip_handler = NULL;
+            ret = drmHandleEvent(drm_fd, &ev);
             print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
             uint64_t before=get_time_ms();
