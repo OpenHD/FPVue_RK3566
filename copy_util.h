@@ -10,6 +10,14 @@
 #include <assert.h>
 #include <string.h>
 
+
+void simple_memcpy (char *dst, const char *src, size_t n)
+{
+    char *ret = dst;
+    while (n--)
+        *dst++ = *src++;
+}
+
 struct memcpy_args_t {
     void* src;
     void* dst;
@@ -17,7 +25,8 @@ struct memcpy_args_t {
 };
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
-    memcpy(args->dst,args->src,args->len);
+    //memcpy(args->dst,args->src,args->len);
+    simple_memcpy(args->dst,args->src,args->len);
 }
 
 void memcpy_threaded(void* dest,void* src, int len,int n_threads){
