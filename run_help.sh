@@ -16,4 +16,4 @@
 
 # H265 udp
 gst-launch-1.0  udpsrc port=5600 caps = "application/x-rtp, media=(string)video, encoding-name=(string)H265" ! rtph265depay !  h265parse config-interval=-1 ! \
-fdsink fd=1 | ./build/fpvue  --rmode 10 --h265
+fdsink fd=1 | ./build/fpvue  --rmode 0 --h265
