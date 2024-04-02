@@ -440,7 +440,7 @@ void *__DISPLAY_THREAD__(void *param)
             //DRM_MODE_PAGE_FLIP_ASYNC | DRM_MODE_ATOMIC_ALLOW_MODESET
             // ... breaks running qopenhd ...
             drmModePageFlip(drm_fd, output_list->saved_crtc->crtc_id, fb_id,
-                            DRM_MODE_PAGE_FLIP_ASYNC,&waiting);
+                            DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_PAGE_FLIP_ASYNC,&waiting);
             uint64_t elapsed_crtc=get_time_ms()-before;
             drmEventContext ev;
             memset(&ev, 0, sizeof(ev));
