@@ -85,12 +85,22 @@ int develop_rendering_mode=0;
 
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
+    uint64_t before=get_time_ms();
     uint8_t * src_p=mmap(
-            0, memory_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
+            0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
     if (src_p == NULL || src_p == MAP_FAILED) {
         assert(false);
     }
+    uint8_t * dst_p=mmap(
+            0, memory_size,    PROT_WRITE, MAP_SHARED,
+            fd_dst, 0);
+    if (dst_p == NULL || dst_p == MAP_FAILED) {
+        assert(false);
+    }
+    memcpy(src_p,dst_p,memory_size);
+    uint64_t elapsed_memcpy=get_time_ms()-before;
+    print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
 
 void initialize_output_buffers(MppFrame  frame){
@@ -149,7 +159,7 @@ void initialize_output_buffers(MppFrame  frame){
         assert(!ret);
         //
         uint8_t * primed_framebuffer=mmap(
-                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_PRIVATE,
+                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
             printf(
@@ -383,9 +393,12 @@ void *__FRAME_THREAD__(void *param)
                         if(develop_rendering_mode==6){
                             uint64_t before=get_time_ms();
                             if(i!=0){
-                                void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
+                                /*void* in_buffer_p=mpi.frame_to_drm[i].memory_mmap;
                                 void* out_buffer_p=mpi.frame_to_drm[0].memory_mmap;
-                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);
+                                memcpy(out_buffer_p,in_buffer_p,mpi.frame_to_drm[0].memory_mmap_size/2);*/
+                                int fd_src=mpi.frame_to_drm[i].prime_fd;
+                                int fd_dst=mpi.frame_to_drm[0].prime_fd;
+                                map_copy_unmap(fd_src,fd_dst,mpi.frame_to_drm[0].memory_mmap_size);
                             }
                             uint64_t elapsed_memcpy=get_time_ms()-before;
                             print_time_ms("memcpy took",elapsed_memcpy);
