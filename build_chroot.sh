@@ -19,12 +19,12 @@ make -j4 install
 cd ../../../../
 ls
 cmake -B build
-sudo cmake --build build --target install
+sudo cmake --build build --target install --prefix "/opt/fpv"
 
 
 VERSION="1.2-$(date -d '+1 hour' +'%m-%d-%Y--%H-%M-%S')"
 VERSION=$(echo "$VERSION" | sed 's/\//-/g')
-# fpm -a arm64 -s dir -t deb -n mpp-rk3566 -v "$VERSION" -C mpp-package -p mpp-rk3566_VERSION_ARCH.deb
+fpm -a arm64 -s dir -t deb -n fpv-rk3566 -v "$VERSION" -C /opt/fpv -p fpv-rk3566_VERSION_ARCH.deb
 echo "push to cloudsmith"
 git describe --exact-match HEAD >/dev/null 2>&1
 echo "Pushing the package to OpenHD 2.3 repository"
