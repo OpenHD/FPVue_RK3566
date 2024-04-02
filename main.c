@@ -83,14 +83,29 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 
-#include <arm_neon.h>
+struct memcpy_args_t {
+    void* src;
+    void* dst;
+    int len;
+};
+void* memcpy_data_function(void* args_uncast){
+    struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
+    memcpy(args->dst,args->src,args->len);
+}
 
-/*void memcpy_test(void* dest,void* src, int len){
-    for(int i=len-1;i>0;i--){
-        ((char*)dest)[i]=((char*)src)[i];
-    }
-    //memcpy(dst_p,src_p,memory_size);
-}*/
+void memcpy_threaded(void* dest,void* src, int len){
+    pthread_t thread1;
+    struct memcpy_args_t memcpyArgs;
+    int len_first=len / 2;
+    int len_second=len-len_first;
+    memcpyArgs.src=src;
+    memcpyArgs.dst=dest;
+    memcpyArgs.len=len_first;
+    int iret1 = pthread_create( &thread1, NULL, &memcpy_data_function, (void*) &memcpyArgs);
+    assert(iret1!=0);
+    memcpy(src+len_first,dest+len_first,len_second);
+    pthread_join(thread1, NULL);
+}
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     printf("map_copy_unmap\n");
@@ -107,8 +122,8 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
-    memcpy(dst_p,src_p,memory_size);
-    //memcpy_test(dst_p,src_p,memory_size);
+    //memcpy(dst_p,src_p,memory_size);
+    memcpy_threaded(dst_p,src_p,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
