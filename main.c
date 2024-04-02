@@ -85,12 +85,12 @@ int develop_rendering_mode=0;
 
 #include <arm_neon.h>
 
-void memcpy_test(void* dest,void* src, int len){
+/*void memcpy_test(void* dest,void* src, int len){
     for(int i=len-1;i>0;i--){
         ((char*)dest)[i]=((char*)src)[i];
     }
     //memcpy(dst_p,src_p,memory_size);
-}
+}*/
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     printf("map_copy_unmap\n");
@@ -107,8 +107,8 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
-    //memcpy(dst_p,src_p,memory_size);
-    memcpy_test(dst_p,src_p,memory_size);
+    memcpy(dst_p,src_p,memory_size);
+    //memcpy_test(dst_p,src_p,memory_size);
     uint64_t elapsed_memcpy=get_time_ms()-before;
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
