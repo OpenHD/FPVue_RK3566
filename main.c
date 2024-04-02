@@ -88,13 +88,13 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
     uint64_t before=get_time_ms();
     uint8_t * src_p=mmap(
-            0, memory_size,    PROT_READ, MAP_PRIVATE | MAP_HUGETLB,
+            0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
     if (src_p == NULL || src_p == MAP_FAILED) {
         assert(false);
     }
     uint8_t * dst_p=mmap(
-            0, memory_size,    PROT_WRITE, MAP_SHARED | MAP_HUGETLB,
+            0, memory_size,    PROT_WRITE, MAP_SHARED,
             fd_dst, 0);
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
