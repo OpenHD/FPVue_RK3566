@@ -84,6 +84,15 @@ int video_zpos = 1;
 int develop_rendering_mode=0;
 
 
+void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
+    uint8_t * src_p=mmap(
+            0, memory_size,    PROT_READ | PROT_WRITE, MAP_SHARED,
+            fd_src, 0);
+    if (src_p == NULL || src_p == MAP_FAILED) {
+        assert(false);
+    }
+}
+
 void initialize_output_buffers(MppFrame  frame){
     int ret;
     int i;
@@ -140,7 +149,7 @@ void initialize_output_buffers(MppFrame  frame){
         assert(!ret);
         //
         uint8_t * primed_framebuffer=mmap(
-                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
+                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_PRIVATE,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
             printf(
