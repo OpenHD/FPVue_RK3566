@@ -5,7 +5,7 @@ sudo apt install -y python3-pip
 sudo pip3 install --upgrade cloudsmith-cli
 curl -1sLf 'https://dl.cloudsmith.io/public/openhd/release/setup.deb.sh'| sudo -E bash
 apt update
-sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev libcairo-dev
+sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev libcairo-dev mpp-rk3566 
 gem install fpm
 cmake -B build
 sudo cmake --build build --target install
