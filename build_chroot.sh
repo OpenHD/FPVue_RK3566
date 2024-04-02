@@ -14,7 +14,7 @@ sudo apt install -y git ruby-dev curl make cmake gcc g++ wget libdrm-dev mlocate
 gem install fpm
 cd build/linux/aarch64
 ./make-Makefiles.bash
-sudo cmake --build build --target install
+make -j4 install
 
 cd ..
 cmake -B build
