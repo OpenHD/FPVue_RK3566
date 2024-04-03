@@ -18,7 +18,7 @@ make -j4 install
 
 cd ../../../../
 ls
-cmake -B build -DCMAKE_INSTALL_PREFIX="/opt/fpv"
+cmake -B build -DCMAKE_INSTALL_PREFIX="/opt/fpv/usr/local"
 sudo cmake --build build --target install
 
 
