@@ -654,7 +654,8 @@ void modeset_cleanup(int fd, struct modeset_output *output_list)
 }
 
 void
-extra_modeset_set_fb(int fd, struct modeset_output *out, drmModeAtomicReq *req, struct drm_object *plane, int fb_id) {
+extra_modeset_set_fb(int fd, struct modeset_output *out, drmModeAtomicReq *req2, struct drm_object *plane, int fb_id) {
+    drmModeAtomicReq *req=drmModeAtomicAlloc();
     if (set_drm_object_property(req, plane, "FB_ID", fb_id) < 0)
         return;
     int ret, flags;
@@ -662,4 +663,5 @@ extra_modeset_set_fb(int fd, struct modeset_output *out, drmModeAtomicReq *req, 
     ret = drmModeAtomicCommit(fd, req, flags, NULL);
     if (ret < 0)
         fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
+    drmModeAtomicFree(req);
 }
