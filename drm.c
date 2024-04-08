@@ -560,12 +560,12 @@ int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq
 	}
 
 	/* perform test-only atomic commit */
-	flags = DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET;
+	/*flags = DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET;
 	ret = drmModeAtomicCommit(fd, req, flags, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "test-only atomic commit failed for plane %d: %m\n", plane->id);
 		return ret;
-	}
+	}*/
 
 	/* initial modeset on all outputs */
 	flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
