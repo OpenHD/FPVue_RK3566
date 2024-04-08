@@ -878,7 +878,7 @@ int read_filesrc_stream(MppPacket *packet) {
             mpp_packet_set_pos(packet, data_p);
             mpp_packet_set_length(packet, data_len);
             while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-                usleep(10000);
+                usleep(2*1000);
             }
             if(!first_time_fed_data_logged){
                 //printf("Fed data\n");
