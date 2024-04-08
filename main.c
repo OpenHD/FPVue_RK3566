@@ -645,15 +645,15 @@ void *__DISPLAY_THREAD__(void *param)
             print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
             uint64_t before=get_time_ms();
-            ret = modeset_perform_modeset(drm_fd,
+            /*ret = modeset_perform_modeset(drm_fd,
                 output_list, output_list->video_request, &output_list->video_plane,
                 fb_id,
                 output_list->video_frm_width,
                 output_list->video_frm_height,
                 video_zpos);
-                assert(ret >= 0);
-            //extra_modeset_set_fb(drm_fd, output_list,&output_list->video_plane,
-            //                           fb_id);
+                assert(ret >= 0);*/
+            extra_modeset_set_fb(drm_fd, output_list,&output_list->video_plane,
+                                       fb_id);
             uint64_t elapsed_modeset=get_time_ms()-before;
             print_time_ms("modeset_perform_modeset took",elapsed_modeset);
 	    }else if(develop_rendering_mode==5){
