@@ -123,7 +123,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     uint64_t before_memset=get_time_ms();
     char lol=get_time_ms() % 255;
     memset(dst_p,lol,memory_size);
-    uint64_t elapsed_memset=get_time_ms()-before;
+    uint64_t elapsed_memset=get_time_ms()-before_memset;
     print_time_ms("memset took",elapsed_memset);
 
     //memcpy(dst_p,src_p,memory_size);
