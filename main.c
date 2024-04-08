@@ -120,11 +120,11 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     start_sync(fd_src,false);
     start_sync(fd_dst,true);
     // First, do the memset
-    /*uint64_t before_memset=get_time_ms();
+    uint64_t before_memset=get_time_ms();
     char lol=get_time_ms() % 255;
     memset(dst_p,lol,memory_size);
     uint64_t elapsed_memset=get_time_ms()-before;
-    print_time_ms("mmap_copy_unmap memset took",elapsed_memset);*/
+    print_time_ms("memset took",elapsed_memset);
 
     //memcpy(dst_p,src_p,memory_size);
     uint64_t before_memcpy=get_time_ms();
