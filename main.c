@@ -134,7 +134,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     print_time_ms("memcpy took",elapsed_memcpy);
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
-    free(big_buff);
+    //free(big_buff);
 }
 
 void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
