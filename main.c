@@ -83,6 +83,24 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 
+void start_sync(int fd,bool write){
+    struct dma_buf_sync sync;
+    sync.flags = DMA_BUF_SYNC_START | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
+
+    int ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+    if (ret) {
+        printf("start_sync ioctl failed for %s %d\n", strerror(errno), fd);
+    }
+}
+void end_sync(int fd,bool write){
+    struct dma_buf_sync sync;
+    sync.flags = DMA_BUF_SYNC_END | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
+
+    int ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+    if (ret) {
+        printf("end_sync ioctl failed for %s %d\n", strerror(errno), fd);
+    }
+}
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
@@ -99,6 +117,8 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
+    start_sync(fd_src,false);
+    start_sync(fd_dst,true);
     // First, do the memset
     /*uint64_t before_memset=get_time_ms();
     char lol=get_time_ms() % 255;
@@ -109,7 +129,13 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //memcpy(dst_p,src_p,memory_size);
     memcpy_threaded(dst_p,src_p,memory_size,2);
     uint64_t elapsed_memcpy=get_time_ms()-before;
+    end_sync(fd_src,false);
+    end_sync(fd_dst,true);
     print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
+}
+
+void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
+    void *buf = mpp_buffer_get_ptr(*src);
 }
 
 void initialize_output_buffers(MppFrame  frame){
