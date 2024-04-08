@@ -38,6 +38,7 @@
 #include "mavlink.h"
 #include "time_util.h"
 #include "copy_util.h"
+#include "linux/dma-buf.h"
 
 
 #define READ_BUF_SIZE (1024*1024) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
