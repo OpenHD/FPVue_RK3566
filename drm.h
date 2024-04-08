@@ -116,6 +116,6 @@ void restore_planes_zpos(int fd, struct modeset_output *output_list);
 
 void modeset_cleanup(int fd, struct modeset_output *output_list);
 
-void extra_modeset_set_fb(int fd, struct modeset_output *out, drmModeAtomicReq * req, struct drm_object *plane, int fb_id);
+void extra_modeset_set_fb(int fd, struct modeset_output *out,struct drm_object *plane, int fb_id);
 
 #endif
