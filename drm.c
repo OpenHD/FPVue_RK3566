@@ -658,7 +658,7 @@ extra_modeset_set_fb(int fd, struct modeset_output *out, drmModeAtomicReq *req, 
     if (set_drm_object_property(req, plane, "FB_ID", fb_id) < 0)
         return;
     int ret, flags;
-    flags = DRM_MODE_ATOMIC_ALLOW_MODESET |  DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_ASYNC;
+    flags = DRM_MODE_ATOMIC_ALLOW_MODESET |  DRM_MODE_ATOMIC_NONBLOCK;
     ret = drmModeAtomicCommit(fd, req, flags, NULL);
     if (ret < 0)
         fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
