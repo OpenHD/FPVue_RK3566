@@ -105,7 +105,6 @@ void end_sync(int fd,bool write){
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
-    uint64_t before=get_time_ms();
     uint8_t * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
@@ -128,11 +127,12 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     print_time_ms("mmap_copy_unmap memset took",elapsed_memset);*/
 
     //memcpy(dst_p,src_p,memory_size);
+    uint64_t before_memcpy=get_time_ms();
     memcpy_threaded(dst_p,src_p,memory_size,2);
-    uint64_t elapsed_memcpy=get_time_ms()-before;
+    uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
+    print_time_ms("memcpy took",elapsed_memcpy);
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
-    print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
 }
 
 void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
