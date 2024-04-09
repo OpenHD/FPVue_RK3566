@@ -1175,7 +1175,7 @@ int main(int argc, char **argv)
     }
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
     if(!decode_h265){
-        //weird_init_h264(mpi.mpi,mpi.ctx);
+        weird_init_h264(mpi.mpi,mpi.ctx);
     }
 	assert(!ret);
 
