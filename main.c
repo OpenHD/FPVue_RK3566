@@ -671,7 +671,7 @@ void *__DISPLAY_THREAD__(void *param)
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
             uint64_t elapsed_modeset=get_time_ms()-before;
-            print_time_ms("drmModeSetPlane took",elapsed_modeset);
+            //print_time_ms("drmModeSetPlane took",elapsed_modeset);
         }else if(develop_rendering_mode==6){
             // memcpy
             uint64_t before=get_time_ms();
@@ -729,7 +729,7 @@ void *__DISPLAY_THREAD__(void *param)
 		
 		struct timespec rtime = frame_stats[output_list->video_poc];
 		latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
-		printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
+		//printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
 		
 	}
 end:	
