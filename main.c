@@ -785,7 +785,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 	printf("listening on socket %d\n", port);
 
-	uint8_t* rx_buffer = malloc(1024 * 1024);
+	uint8_t* rx_buffer = malloc(READ_BUF_SIZE);
     
 	int nalStart = 0;
 	int poc = 0;
@@ -1150,7 +1150,7 @@ int main(int argc, char **argv)
 	////////////////////////////////// MPI SETUP
 	MppPacket packet;
 
-	uint8_t* nal_buffer = malloc(1024 * 1024);
+	uint8_t* nal_buffer = malloc(READ_BUF_SIZE);
 	assert(nal_buffer);
 	ret = mpp_packet_init(&packet, nal_buffer, READ_BUF_SIZE);
 	assert(!ret);
