@@ -559,9 +559,9 @@ void *__FRAME_THREAD__(void *param)
                         output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
                         output_list->video_fb_index=i;
                         output_list->decoding_pts=feed_data_ts;
-                        ret = pthread_cond_signal(&video_cond);
-                        assert(!ret);
                         ret = pthread_mutex_unlock(&video_mutex);
+                        assert(!ret);
+                        ret = pthread_cond_signal(&video_cond);
                         assert(!ret);
 
                     }
