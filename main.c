@@ -881,11 +881,11 @@ int read_filesrc_stream(MppPacket *packet) {
     int ret = 0;
     while (!signal_flag){
         int rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
-        if(rv == -1){
+        /*if(rv == -1){
             perror("select\n");
         }else if(rv == 0) {
             //printf("timeout\n");
-        }else {
+        }else {*/
             printf("Data\n");
             // data to read
             //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
@@ -909,7 +909,7 @@ int read_filesrc_stream(MppPacket *packet) {
             } else{
                 printf("fread should not fail after successfull select\n");
             }
-        }
+        //}
     }
     printf("Feeding eos\n");
     mpp_packet_set_eos(packet);
