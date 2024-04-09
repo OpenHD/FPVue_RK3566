@@ -40,7 +40,8 @@
 #include "copy_util.h"
 #include "linux/dma-buf.h"
 
-
+// This buffer size has no effect on the latency -
+// 10MB should be enough, no matter how high bitrate the stream is.
 #define READ_BUF_SIZE (1024*1024*10) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
 #define MAX_FRAMES 16		// min 16 and 20+ recommended (mpp/readme.txt)
 
