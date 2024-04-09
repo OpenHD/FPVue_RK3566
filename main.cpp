@@ -926,7 +926,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
     while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
         usleep(10000);
     }
-};*/
+};
 
 
 int read_filesrc_stream(MppPacket *packet) {
@@ -1248,8 +1248,8 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream(packet);
-    //read_gstreamerpipe_stream(packet);
+    //read_filesrc_stream(packet);
+    read_gstreamerpipe_stream(packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 
