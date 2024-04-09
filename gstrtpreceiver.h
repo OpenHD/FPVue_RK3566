@@ -20,7 +20,7 @@ public:
     /**
      * The constructor is delayed, remember to use start_receiving()
      */
-    explicit GstRtpReceiver(int udp_port);
+    explicit GstRtpReceiver(int udp_port,int codec);
     virtual ~GstRtpReceiver();
     // Depending on the codec, these are h264,h265 or mjpeg "frames" / frame buffers
     // The big advantage of gstreamer is that it seems to handle all those parsing quirks the best,

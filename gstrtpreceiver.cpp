@@ -76,10 +76,10 @@ static void initGstreamerOrThrow() {
     }
 }
 
-GstRtpReceiver::GstRtpReceiver(int udp_port)
+GstRtpReceiver::GstRtpReceiver(int udp_port,int codec)
 {
     m_port=udp_port;
-    m_video_codec=0;
+    m_video_codec=codec;
     initGstreamerOrThrow();
 }
 
@@ -130,7 +130,7 @@ static void loop_pull_appsink_samples(bool& keep_looping,GstElement *app_sink_el
 
 std::string GstRtpReceiver::construct_gstreamer_pipeline()
 {
-    const auto codec=pipeline::VideoCodec::H264;
+    const auto codec=m_video_codec==0 ? pipeline::VideoCodec::H264 : pipeline::VideoCodec::H265;
     std::stringstream ss;
     ss<<"udpsrc port="<<m_port<<" "<<gst_create_rtp_caps(codec)<<" ! ";
     ss<<pipeline::create_rtp_depacketize_for_codec(codec);
