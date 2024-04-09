@@ -971,7 +971,7 @@ void printHelp() {
 }
 
 void set_control_verbose(MppApi * mpi,  MppCtx ctx,int control,RK_U32 enable){
-    RK_U32 res = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &dat);
+    RK_U32 res = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &enable);
     if(res){
         printf("Could not set control %d %d\n",control,enable);
         assert(false);
