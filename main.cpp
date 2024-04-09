@@ -48,6 +48,7 @@ extern "C" {
 #endif
 #ifdef __cplusplus
 #include "gstrtpreceiver.h"
+#include "SchedulingHelper.hpp"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -507,6 +508,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
 
 void *__FRAME_THREAD__(void *param)
 {
+    SchedulingHelper::set_thread_params_max_realtime("FRAME_THREAD",SchedulingHelper::PRIORITY_REALTIME_MID);
 	int ret;
 	int i;	
 	MppFrame  frame  = NULL;
@@ -589,6 +591,9 @@ void *__FRAME_THREAD__(void *param)
 
 void *__DISPLAY_THREAD__(void *param)
 {
+    // With the proper rendering mode(s) this thread
+    // doesn't hog the CPU
+    SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
 	int ret;	
 	int frame_counter = 0;
 	uint64_t latency_avg[200];
@@ -893,6 +898,12 @@ void read_gstreamerpipe_stream(MppPacket *packet){
     int decoder_stalled_count=0;
     auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
+        // Let the gst pull thread run at quite high priority
+        static bool first= false;
+        if(first){
+            SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+            first= false;
+        }
         void* data_p=frame->data();
         int data_len=frame->size();
         mpp_packet_set_data(packet, data_p);

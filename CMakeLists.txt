@@ -14,6 +14,7 @@ set(SOURCE_FILES drm.c
 				mavlink.c
         main.cpp
         copy_util.h
+        SchedulingHelper.hpp
         gstrtpreceiver.cpp
         gstrtpreceiver.h
 )
