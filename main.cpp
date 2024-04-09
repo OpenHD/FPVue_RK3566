@@ -1052,7 +1052,7 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
         assert(false);
     }
-    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0); // mpp_split_mode ? 0xffff : 0
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 1); // mpp_split_mode ? 0xffff : 0
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
