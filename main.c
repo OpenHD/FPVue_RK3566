@@ -86,7 +86,7 @@ int develop_rendering_mode=0;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
-
+struct TSAccumulator m_drm_mode_set_plane_latency;
 void start_sync(int fd,bool write){
     struct dma_buf_sync sync;
     sync.flags = DMA_BUF_SYNC_START | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
@@ -682,7 +682,8 @@ void *__DISPLAY_THREAD__(void *param)
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
             uint64_t elapsed_modeset=get_time_ms()-before;
-            print_time_ms("drmModeSetPlane took",elapsed_modeset);
+            accumulate_and_print("drmModeSetPlane",elapsed_modeset,&m_drm_mode_set_plane_latency);
+            //print_time_ms("drmModeSetPlane took",elapsed_modeset);
         }else if(develop_rendering_mode==6){
             // memcpy
             uint64_t before=get_time_ms();
