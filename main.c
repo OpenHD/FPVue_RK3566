@@ -249,7 +249,7 @@ void initialize_output_buffers(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t*)&mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
 
@@ -347,7 +347,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t*)&mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
     // Can be different than n drm prime buffers.
@@ -485,7 +485,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t *)&mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
 
