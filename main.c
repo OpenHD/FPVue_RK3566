@@ -970,6 +970,13 @@ void printHelp() {
   );
 }
 
+void set_control_verbose(MppApi * mpi,  MppCtx ctx,int control,RK_U32 enable){
+    RK_U32 res = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &dat);
+    if(res){
+        printf("Could not set control %d %d\n",control,enable);
+        assert(false);
+    }
+}
 
 bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
 
@@ -997,19 +1004,12 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
         return false;
     }
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
+    //set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_DEINTERLACE, 0xffff);
 
-    RK_U32 dat = 0xffff;
-    RK_U32 ret1 = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &dat);
-    dat = 0xffff;
-    RK_U32 ret2 = mpi->control(ctx, MPP_DEC_SET_DISABLE_ERROR, &dat);
-    dat = 0xffff;
-    RK_U32 ret3 = mpi->control(ctx, MPP_DEC_SET_IMMEDIATE_OUT, &dat);
-    dat = 0xffff;
-    RK_U32 ret4 = mpi->control(ctx, MPP_DEC_SET_ENABLE_FAST_PLAY, &dat);
-    if (ret1 | ret2 | ret3 | ret4) {
-        printf("Could not set decoder params on startup\n");
-        return false;
-    }
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
     if (ret) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
