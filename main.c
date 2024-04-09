@@ -904,8 +904,9 @@ int read_filesrc_stream(MppPacket *packet) {
         }else {*/
             //printf("Data\n");
             // data to read
-            data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
+            //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
             //data_len = read(filedesc,data_p,READ_BUF_SIZE);
+            data_len = read(STDIN_FILENO,data_p,READ_BUF_SIZE);
             if (data_len > 0) {
                 //printf("Got %d\n",data_len);
                 mpp_packet_set_data(packet, data_p);
