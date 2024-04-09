@@ -31,7 +31,9 @@
 
 #include "linux/dma-buf.h"
 
+#ifdef __cplusplus
 extern "C" {
+#endif
 #include "main.h"
 #include "drm.h"
 #include "osd.h"
@@ -41,8 +43,10 @@ extern "C" {
 #include "mavlink.h"
 #include "time_util.h"
 #include "copy_util.h"
-};
-#include "gstrtpreceiver.h"
+#ifdef __cplusplus
+}
+#endif
+//#include "gstrtpreceiver.h"
 
 // This buffer size has no effect on the latency -
 // 5MB should be enough, no matter how high bitrate the stream is.
@@ -881,7 +885,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 }
 
 
-void read_gstreamerpipe_stream(MppPacket *packet){
+/*void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600};
     std::shared_ptr<std::vector<uint8_t>> copy;
     auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
@@ -920,7 +924,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
     while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
         usleep(10000);
     }
-};
+};*/
 
 
 int read_filesrc_stream(MppPacket *packet) {
