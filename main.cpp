@@ -42,7 +42,7 @@ extern "C" {
 #include "time_util.h"
 #include "copy_util.h"
 };
-#include "gst_helper.h"
+#include "gstrtpreceiver.h"
 
 // This buffer size has no effect on the latency -
 // 5MB should be enough, no matter how high bitrate the stream is.
@@ -880,6 +880,46 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
+
+void read_gstreamerpipe_stream(MppPacket *packet){
+    GstRtpReceiver receiver{5600};
+    auto cb=[packet](std::shared_ptr<std::vector<uint8_t>> frame){
+        void* data_p=frame->data();
+        int data_len=frame->size();
+        mpp_packet_set_data(packet, data_p);
+        mpp_packet_set_size(packet, data_len);
+        mpp_packet_set_pos(packet, data_p);
+        mpp_packet_set_length(packet, data_len);
+        mpp_packet_set_pts(packet,(RK_S64) get_time_ms());
+        // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
+        // or success
+        uint64_t data_feed_begin = get_time_ms();
+        int ret=0;
+        while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+            uint64_t elapsed = get_time_ms() - data_feed_begin;
+            if (elapsed > 100) {
+                printf("Cannot feed decoder, stalled ?\n");
+                break;
+            }
+            usleep(2 * 1000);
+        }
+    };
+    receiver.start_receiving(cb);
+    while (!signal_flag){
+        sleep(1);
+    }
+    receiver.stop_receiving();
+    printf("Feeding eos\n");
+    mpp_packet_set_eos(packet);
+    //mpp_packet_set_pos(packet, nal_buffer);
+    mpp_packet_set_length(packet, 0);
+    int ret=0;
+    while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+        usleep(10000);
+    }
+};
+
+
 int read_filesrc_stream(MppPacket *packet) {
     /*FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
@@ -1198,7 +1238,8 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream(&packet);
+    //read_filesrc_stream(&packet);
+    read_gstreamerpipe_stream(&packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 

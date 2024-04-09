@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project(fpvue)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 add_compile_options("-Wno-address-of-packed-member")
 
@@ -14,7 +14,8 @@ set(SOURCE_FILES drm.c
 				mavlink.c
         main.cpp
         copy_util.h
-        gst_helper.h
+        gstrtpreceiver.cpp
+        gstrtpreceiver.h
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
