@@ -96,6 +96,7 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 bool decode_h265=false;
+int gst_udp_port=-1;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -894,7 +895,8 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 
 void read_gstreamerpipe_stream(MppPacket *packet){
-    GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
+    assert(gst_udp_port!=-1);
+    GstRtpReceiver receiver{gst_udp_port,decode_h265 ? 1 : 0};
     int decoder_stalled_count=0;
     auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
@@ -1031,6 +1033,8 @@ void printHelp() {
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
     "\n"
+    "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
+    "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n", __DATE__
   );
@@ -1165,6 +1169,10 @@ int main(int argc, char **argv)
         decode_h265=true;
         continue;
     }
+    __OnArgument("--gst-udp-port") {
+        gst_udp_port=atoi(__ArgValue);
+        continue;
+    }
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
@@ -1253,8 +1261,11 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    //read_filesrc_stream((void**)packet);
-    read_gstreamerpipe_stream((void**)packet);
+    if(gst_udp_port==-1){
+        read_filesrc_stream((void**)packet);
+    }else{
+        read_gstreamerpipe_stream((void**)packet);
+    }
 
 	////////////////////////////////////////////// MPI CLEANUP
 
