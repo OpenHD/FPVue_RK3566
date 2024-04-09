@@ -50,7 +50,7 @@ namespace pipeline{
         if(codec==VideoCodec::H264){
             std::stringstream ss;
             ss<<"video/x-h264";
-            ss<<", stream-format=\"byte-stream\"";
+            ss<<", stream-format=\"byte-stream\",alignment=au";
             //ss<<", alignment=\"nal\"";
             ss<<" ! ";
             return ss.str();
