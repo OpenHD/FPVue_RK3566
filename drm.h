@@ -69,6 +69,8 @@ struct modeset_output {
 	int video_fb_id;
     // only used for memcpy
     int video_fb_index;
+    // Used to calculate latency
+    uint64_t decoding_pts;
 	int video_skipped_frames;
 	int video_poc;
 
@@ -115,5 +117,7 @@ int modeset_atomic_prepare_commit(int fd, struct modeset_output *out, drmModeAto
 void restore_planes_zpos(int fd, struct modeset_output *output_list);
 
 void modeset_cleanup(int fd, struct modeset_output *output_list);
+
+void extra_modeset_set_fb(int fd, struct modeset_output *out,struct drm_object *plane, int fb_id);
 
 #endif

@@ -568,7 +568,7 @@ int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq
 	}
 
 	/* initial modeset on all outputs */
-	flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+    flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 	ret = drmModeAtomicCommit(fd, req, flags, NULL);
 	if (ret < 0)
 		fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
@@ -651,4 +651,17 @@ void restore_planes_zpos(int fd, struct modeset_output *output_list) {
 void modeset_cleanup(int fd, struct modeset_output *output_list)
 {
 	modeset_output_destroy(fd, output_list);
+}
+
+void
+extra_modeset_set_fb(int fd, struct modeset_output *out, struct drm_object *plane, int fb_id) {
+    drmModeAtomicReq *req=drmModeAtomicAlloc();
+    if (set_drm_object_property(req, plane, "FB_ID", fb_id) < 0)
+        return;
+    int ret, flags;
+    flags = DRM_MODE_ATOMIC_ALLOW_MODESET |  DRM_MODE_ATOMIC_NONBLOCK;
+    ret = drmModeAtomicCommit(fd, req, flags, NULL);
+    if (ret < 0)
+        fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
+    drmModeAtomicFree(req);
 }

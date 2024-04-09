@@ -29,6 +29,11 @@
 #include <linux/videodev2.h>
 #include <rockchip/rk_mpi.h>
 
+#include "linux/dma-buf.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "main.h"
 #include "drm.h"
 #include "osd.h"
@@ -38,9 +43,16 @@
 #include "mavlink.h"
 #include "time_util.h"
 #include "copy_util.h"
+#ifdef __cplusplus
+}
+#endif
+#ifdef __cplusplus
+#include "gstrtpreceiver.h"
+#endif
 
-
-#define READ_BUF_SIZE (1024*1024) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
+// This buffer size has no effect on the latency -
+// 5MB should be enough, no matter how high bitrate the stream is.
+#define READ_BUF_SIZE (1024*1024*5) // SZ_1M https://github.com/rockchip-linux/mpp/blob/ed377c99a733e2cdbcc457a6aa3f0fcd438a9dff/osal/inc/mpp_common.h#L179
 #define MAX_FRAMES 16		// min 16 and 20+ recommended (mpp/readme.txt)
 
 #define CODEC_ALIGN(x, a)   (((x)+(a)-1)&~((a)-1))
@@ -54,7 +66,7 @@ struct {
 	MppBufferGroup	frm_grp;
 	struct {
 		int prime_fd;
-		int fb_id;
+		uint32_t fb_id;
 		uint32_t handle;
         // only used in copy mode
         void* memory_mmap;
@@ -82,34 +94,66 @@ int bw_curr = 0;
 long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
+bool decode_h265=false;
+struct TSAccumulator m_decoding_latency;
+// NOTE: Does not track latency to end completely
+struct TSAccumulator m_decode_and_handover_display_latency;
+struct TSAccumulator m_drm_mode_set_plane_latency;
+void start_sync(int fd,bool write){
+    struct dma_buf_sync sync;
+    sync.flags = DMA_BUF_SYNC_START | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
 
+    int ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+    if (ret) {
+        printf("start_sync ioctl failed for %s %d\n", strerror(errno), fd);
+    }
+}
+void end_sync(int fd,bool write){
+    struct dma_buf_sync sync;
+    sync.flags = DMA_BUF_SYNC_END | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
+
+    int ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
+    if (ret) {
+        printf("end_sync ioctl failed for %s %d\n", strerror(errno), fd);
+    }
+}
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
-    uint64_t before=get_time_ms();
-    uint8_t * src_p=mmap(
+    void * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
     if (src_p == NULL || src_p == MAP_FAILED) {
         assert(false);
     }
-    uint8_t * dst_p=mmap(
+    void * dst_p=mmap(
             0, memory_size,    PROT_WRITE, MAP_SHARED,
             fd_dst, 0);
     if (dst_p == NULL || dst_p == MAP_FAILED) {
         assert(false);
     }
+    start_sync(fd_src,false);
+    start_sync(fd_dst,true);
     // First, do the memset
     /*uint64_t before_memset=get_time_ms();
     char lol=get_time_ms() % 255;
     memset(dst_p,lol,memory_size);
-    uint64_t elapsed_memset=get_time_ms()-before;
-    print_time_ms("mmap_copy_unmap memset took",elapsed_memset);*/
+    uint64_t elapsed_memset=get_time_ms()-before_memset;
+    print_time_ms("memset took",elapsed_memset);*/
+    //void* big_buff= malloc(memory_size);
 
     //memcpy(dst_p,src_p,memory_size);
-    memcpy_threaded(dst_p,src_p,memory_size,2);
-    uint64_t elapsed_memcpy=get_time_ms()-before;
-    print_time_ms("mmap_copy_unmap took",elapsed_memcpy);
+    uint64_t before_memcpy=get_time_ms();
+    memcpy_threaded(dst_p,src_p,memory_size,4);
+    uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
+    print_time_ms("memcpy took",elapsed_memcpy);
+    end_sync(fd_src,false);
+    end_sync(fd_dst,true);
+    //free(big_buff);
+}
+
+void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
+    void *buf = mpp_buffer_get_ptr(*src);
 }
 
 void initialize_output_buffers(MppFrame  frame){
@@ -167,7 +211,7 @@ void initialize_output_buffers(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -181,7 +225,7 @@ void initialize_output_buffers(MppFrame  frame){
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",dmcd.size);
+        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
 
         MppBufferInfo info;
@@ -278,7 +322,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -401,7 +445,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -415,7 +459,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",dmcd.size);
+        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
         if(i!=0){
             MppBufferInfo info;
@@ -498,6 +542,12 @@ void *__FRAME_THREAD__(void *param)
 				if (buffer) {
                     //printf("Got frame\n");
 					output_list->video_poc = mpp_frame_get_poc(frame);
+
+                    uint64_t feed_data_ts=mpp_frame_get_pts(frame);
+                    uint64_t decoding_latency=get_time_ms()-feed_data_ts;
+                    accumulate_and_print("Decode",decoding_latency,&m_decoding_latency);
+                    //print_time_ms("Decode",decoding_latency);
+
                     if(develop_rendering_mode==10){
                         // Never commit anything in the display thread
                     }else{
@@ -519,9 +569,10 @@ void *__FRAME_THREAD__(void *param)
                         if (output_list->video_fb_id) output_list->video_skipped_frames++;
                         output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
                         output_list->video_fb_index=i;
-                        ret = pthread_cond_signal(&video_cond);
-                        assert(!ret);
+                        output_list->decoding_pts=feed_data_ts;
                         ret = pthread_mutex_unlock(&video_mutex);
+                        assert(!ret);
+                        ret = pthread_cond_signal(&video_cond);
                         assert(!ret);
 
                     }
@@ -565,6 +616,7 @@ void *__DISPLAY_THREAD__(void *param)
 		clock_gettime(CLOCK_MONOTONIC, &ats);
 		fb_id = output_list->video_fb_id;
         fb_index=output_list->video_fb_index;
+        uint64_t decoding_pts=output_list->decoding_pts;
 		if (output_list->video_skipped_frames) 
 			printf("Display skipped %d frame.\n", output_list->video_skipped_frames);
 		output_list->video_fb_id=0;
@@ -615,6 +667,7 @@ void *__DISPLAY_THREAD__(void *param)
             ret = drmHandleEvent(drm_fd, &ev);
             print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
+            // Unmodded kernel: dual show, 30fps video
             uint64_t before=get_time_ms();
             ret = modeset_perform_modeset(drm_fd,
                 output_list, output_list->video_request, &output_list->video_plane,
@@ -626,6 +679,8 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t elapsed_modeset=get_time_ms()-before;
             print_time_ms("modeset_perform_modeset took",elapsed_modeset);
 	    }else if(develop_rendering_mode==5){
+            // Unmodded kernel: dual show, 30fps video
+            // maybe a bit more than 30fps
             uint64_t before=get_time_ms();
             ret = drmModeSetPlane(
                     drm_fd,
@@ -639,7 +694,8 @@ void *__DISPLAY_THREAD__(void *param)
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
             uint64_t elapsed_modeset=get_time_ms()-before;
-            print_time_ms("drmModeSetPlane took",elapsed_modeset);
+            accumulate_and_print("drmModeSetPlane",elapsed_modeset,&m_drm_mode_set_plane_latency);
+            //print_time_ms("drmModeSetPlane took",elapsed_modeset);
         }else if(develop_rendering_mode==6){
             // memcpy
             uint64_t before=get_time_ms();
@@ -653,11 +709,21 @@ void *__DISPLAY_THREAD__(void *param)
             }
             uint64_t elapsed_memcpy=get_time_ms()-before;
             //print_time_ms("memcpy took",elapsed_memcpy);
+        }else if(develop_rendering_mode==7){
+            // FPS - ?, no qopenhd
+            uint64_t before=get_time_ms();
+            extra_modeset_set_fb(drm_fd, output_list,&output_list->video_plane,
+                                 fb_id);
+            uint64_t elapsed_modeset=get_time_ms()-before;
+            print_time_ms("extra_modeset_perform_modeset took",elapsed_modeset);
         }
         else{
             printf("Unknown rendering mdoe\n");
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
+
+        uint64_t decode_and_handover_display_ms=get_time_ms()-decoding_pts;
+        accumulate_and_print("D&Display",decode_and_handover_display_ms,&m_decode_and_handover_display_latency);
         
 		//assert(!ret);
 		frame_counter++;
@@ -687,9 +753,9 @@ void *__DISPLAY_THREAD__(void *param)
 			max_latency = 0;
 			min_latency = 1844674407370955161;
 		}
-		
-		struct timespec rtime = frame_stats[output_list->video_poc];
-		latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
+        // NOTE: BUG video_poc out of bounds
+		//struct timespec rtime = frame_stats[output_list->video_poc];
+		//latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
 		//printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
 		
 	}
@@ -712,7 +778,7 @@ void sig_handler(int signum)
 int mpp_split_mode = 0;
 
 int enable_dvr = 0;
-char * dvr_file;
+const char * dvr_file;
 
 int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	// Create socket
@@ -730,7 +796,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 	printf("listening on socket %d\n", port);
 
-	uint8_t* rx_buffer = malloc(1024 * 1024);
+	uint8_t* rx_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
     
 	int nalStart = 0;
 	int poc = 0;
@@ -821,7 +887,49 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
-#define DEFAULT_PACKET_SIZE (16*1024)
+
+void read_gstreamerpipe_stream(MppPacket *packet){
+    GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
+    std::shared_ptr<std::vector<uint8_t>> copy;
+    auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
+        //printf("Got data \n");
+        copy=frame;
+        void* data_p=frame->data();
+        int data_len=frame->size();
+        mpp_packet_set_data(packet, data_p);
+        mpp_packet_set_size(packet, data_len);
+        mpp_packet_set_pos(packet, data_p);
+        mpp_packet_set_length(packet, data_len);
+        mpp_packet_set_pts(packet,(RK_S64) get_time_ms());
+        // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
+        // or success
+        uint64_t data_feed_begin = get_time_ms();
+        int ret=0;
+        while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+            uint64_t elapsed = get_time_ms() - data_feed_begin;
+            if (elapsed > 100) {
+                printf("Cannot feed decoder, stalled ?\n");
+                break;
+            }
+            usleep(2 * 1000);
+        }
+    };
+    receiver.start_receiving(cb);
+    while (!signal_flag){
+        sleep(1);
+    }
+    receiver.stop_receiving();
+    printf("Feeding eos\n");
+    mpp_packet_set_eos(packet);
+    //mpp_packet_set_pos(packet, nal_buffer);
+    mpp_packet_set_length(packet, 0);
+    int ret=0;
+    while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+        usleep(10000);
+    }
+};
+
+
 int read_filesrc_stream(MppPacket *packet) {
     /*FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
@@ -829,36 +937,54 @@ int read_filesrc_stream(MppPacket *packet) {
         return 0;
     }*/
     FILE* fp=stdin;
-    fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
-    uint8_t data[1024*1024];
+    int filedesc=fileno(fp);
+    assert(filedesc==0);
+    //fcntl(filedesc, F_SETFL, fcntl(filedesc, F_GETFL) | O_NONBLOCK);
+    /*fd_set set;
+    struct timeval timeout;
+    FD_ZERO(&set);
+    FD_SET(filedesc, &set);
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 20*1000;*/
+    uint8_t data[READ_BUF_SIZE];
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
-    bool first_time_has_data_logged=false;
-    bool first_time_fed_data_logged=false;
     while (!signal_flag){
-        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp);
-        if(data_len>0){
-            if(!first_time_has_data_logged){
-                //printf("Got input data %d\n",data_len);
-                //printf("not logging again\n");
-                //first_time_has_data_logged=true;
+        /*int rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
+        if(rv == -1){
+            perror("select\n");
+        }else if(rv == 0) {
+            //printf("timeout\n");
+        }else {*/
+            //printf("Data\n");
+            // data to read
+            //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
+            //data_len = read(filedesc,data_p,READ_BUF_SIZE);
+            data_len = read(STDIN_FILENO,data_p,READ_BUF_SIZE);
+            if (data_len > 0) {
+                //printf("Got %d\n",data_len);
+                mpp_packet_set_data(packet, data_p);
+                mpp_packet_set_size(packet, data_len);
+                mpp_packet_set_pos(packet, data_p);
+                mpp_packet_set_length(packet, data_len);
+                mpp_packet_set_pts(packet,get_time_ms());
+                // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
+                // or success
+                uint64_t data_feed_begin = get_time_ms();
+                while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+                    uint64_t elapsed = get_time_ms() - data_feed_begin;
+                    if (elapsed > 100) {
+                        printf("Cannot feed decoder, stalled ?\n");
+                        break;
+                    }
+                    usleep(2 * 1000);
+                }
+            }else{
+                usleep(2 * 1000);
+                //printf("fread should not fail after successfull select\n");
             }
-            mpp_packet_set_data(packet, data_p);
-            mpp_packet_set_size(packet, data_len);
-            mpp_packet_set_pos(packet, data_p);
-            mpp_packet_set_length(packet, data_len);
-            while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-                usleep(10000);
-            }
-            if(!first_time_fed_data_logged){
-                //printf("Fed data\n");
-                //printf("not logging again\n");
-                //first_time_fed_data_logged=true;
-            }
-        }else{
-            usleep(2*1000);
-        }
+        //}
     }
     printf("Feeding eos\n");
     mpp_packet_set_eos(packet);
@@ -867,6 +993,7 @@ int read_filesrc_stream(MppPacket *packet) {
     while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
         usleep(10000);
     }
+    return 0;
 }
 
 void printHelp() {
@@ -898,14 +1025,19 @@ void printHelp() {
   );
 }
 
+void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable){
+    RK_U32 res = mpi->control(ctx, control, &enable);
+    if(res){
+        printf("Could not set control %d %d\n",control,enable);
+        assert(false);
+    }
+}
 
-bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
+void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
 
     // config for runtime mode
     MppDecCfg cfg       = NULL;
     RK_U32 need_split   = 1;
-
-    int fast_mode = 1;
 
     mpp_dec_cfg_init(&cfg);
 
@@ -913,7 +1045,7 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
     if (ret) {
         printf("%p failed to get decoder cfg ret %d\n", ctx, ret);
-        return false;
+        assert(false);
     }
 
     /*
@@ -923,29 +1055,24 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
     if (ret) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
-        return false;
-    }
-
-    RK_U32 dat = 0xffff;
-    RK_U32 ret1 = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &dat);
-    dat = 0xffff;
-    RK_U32 ret2 = mpi->control(ctx, MPP_DEC_SET_DISABLE_ERROR, &dat);
-    dat = 0xffff;
-    RK_U32 ret3 = mpi->control(ctx, MPP_DEC_SET_IMMEDIATE_OUT, &dat);
-    dat = 0xffff;
-    RK_U32 ret4 = mpi->control(ctx, MPP_DEC_SET_ENABLE_FAST_PLAY, &dat);
-    if (ret1 | ret2 | ret3 | ret4) {
-        printf("Could not set decoder params on startup\n");
-        return false;
+        assert(false);
     }
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
     if (ret) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
-        return false;
+        assert(false);
     }
-    mpi->control (ctx, MPP_DEC_SET_PARSER_FAST_MODE,
-                  &fast_mode);
-    return true;
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0); // mpp_split_mode ? 0xffff : 0
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
+    //set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_DEINTERLACE, 0xffff);
+    // Docu fast mode:
+    // and improve the
+    // parallelism of decoder hardware and software
+    // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
+    int fast_mode = 0;
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
 }
 
 // main
@@ -961,7 +1088,6 @@ int main(int argc, char **argv)
 	uint16_t mode_width = 0;
 	uint16_t mode_height = 0;
 	uint32_t mode_vrefresh = 0;
-    bool decode_h265=false;
 	// Load console arguments
 	__BeginParseConsoleArguments__(printHelp) 
 	
@@ -1002,8 +1128,8 @@ int main(int argc, char **argv)
 	__OnArgument("--osd-elements") {
 		osd_vars.enable_video = 0;
 		osd_vars.enable_wfbng = 0;
-		char* elements = __ArgValue;
-		char* element = strtok(elements, ",");
+		const char* elements = __ArgValue;
+		const char* element = strtok((char*)elements, ",");
 		while( element != NULL ) {
 			if (!strcmp(element, "video")) {
 				osd_vars.enable_video = 1;
@@ -1023,8 +1149,8 @@ int main(int argc, char **argv)
 	}
 	
 	__OnArgument("--screen-mode") {
-		char* mode = __ArgValue;
-		mode_width = atoi(strtok(mode, "x"));
+		const char* mode = __ArgValue;
+		mode_width = atoi(strtok((char*)mode, "x"));
 		mode_height = atoi(strtok(NULL, "@"));
 		mode_vrefresh = atoi(strtok(NULL, "@"));
 		continue;
@@ -1035,8 +1161,8 @@ int main(int argc, char **argv)
         continue;
     }
     __OnArgument("--rmode") {
-        char* mode = __ArgValue;
-        develop_rendering_mode= atoi(mode);
+        const char* mode = __ArgValue;
+        develop_rendering_mode= atoi((char*)mode);
         continue;
     }
 
@@ -1078,34 +1204,17 @@ int main(int argc, char **argv)
 	////////////////////////////////// MPI SETUP
 	MppPacket packet;
 
-	uint8_t* nal_buffer = malloc(1024 * 1024);
+	uint8_t* nal_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
 	assert(nal_buffer);
 	ret = mpp_packet_init(&packet, nal_buffer, READ_BUF_SIZE);
 	assert(!ret);
 
 	ret = mpp_create(&mpi.ctx, &mpi.mpi);
 	assert(!ret);
-
-	ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &mpp_split_mode);
-	assert(!ret);
-
-    if(!decode_h265){
-        // Docu fast mode:
-        // and improve the
-        // parallelism of decoder hardware and software
-        // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
-        //int fast_mode = 1;
-        //mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_FAST_MODE,
-        //              &fast_mode);
-        int immediate = 1;
-        mpi.mpi->control(mpi.ctx, MPP_DEC_SET_IMMEDIATE_OUT,
-                      &immediate);
-    }
+    set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
-    if(!decode_h265){
-        weird_init_h264(mpi.mpi,mpi.ctx);
-    }
-	assert(!ret);
+    assert(!ret);
+    set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
 
 	// blocked/wait read of frame in thread
 	int param = MPP_POLL_BLOCK;
@@ -1129,7 +1238,7 @@ int main(int argc, char **argv)
 			ret = pthread_create(&tid_mavlink, NULL, __MAVLINK_THREAD__, &signal_flag);
 			assert(!ret);
 		}
-		osd_thread_params *args = malloc(sizeof *args);
+		osd_thread_params *args = (osd_thread_params *)malloc(sizeof *args);
         args->fd = drm_fd;
         args->out = output_list;
 		ret = pthread_create(&tid_osd, NULL, __OSD_THREAD__, args);
@@ -1139,7 +1248,8 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream(packet);
+    //read_filesrc_stream((void**)packet);
+    read_gstreamerpipe_stream((void**)packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 
