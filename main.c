@@ -527,6 +527,11 @@ void *__FRAME_THREAD__(void *param)
 				if (buffer) {
                     //printf("Got frame\n");
 					output_list->video_poc = mpp_frame_get_poc(frame);
+
+                    uint64_t feed_data_ts=mpp_frame_get_pts(frame);
+                    uint64_t decoding_latency=get_time_ms()-feed_data_ts;
+                    print_time_ms("Decode",decoding_latency);
+
                     if(develop_rendering_mode==10){
                         // Never commit anything in the display thread
                     }else{
@@ -895,6 +900,7 @@ int read_filesrc_stream(MppPacket *packet) {
                 mpp_packet_set_size(packet, data_len);
                 mpp_packet_set_pos(packet, data_p);
                 mpp_packet_set_length(packet, data_len);
+                mpp_packet_set_pts(packet,get_time_ms());
                 // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
                 // or success
                 uint64_t data_feed_begin = get_time_ms();
