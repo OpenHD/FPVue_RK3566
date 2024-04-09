@@ -868,6 +868,7 @@ int read_filesrc_stream(MppPacket *packet) {
     }*/
     FILE* fp=stdin;
     int filedesc=fileno(fp);
+    printf("EHm %d\n",filedesc);
     //fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
     fd_set set;
     struct timeval timeout;
