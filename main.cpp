@@ -891,7 +891,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
     int decoder_stalled_count=0;
-    auto cb=[&packet,&copy,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
+    auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
         void* data_p=frame->data();
         int data_len=frame->size();
