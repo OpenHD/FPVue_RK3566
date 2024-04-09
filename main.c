@@ -905,7 +905,7 @@ int read_filesrc_stream(MppPacket *packet) {
             data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
             //data_len = read(filedesc,data_p,READ_BUF_SIZE);
             if (data_len > 0) {
-                printf("Got %d\n",data_len);
+                //printf("Got %d\n",data_len);
                 mpp_packet_set_data(packet, data_p);
                 mpp_packet_set_size(packet, data_len);
                 mpp_packet_set_pos(packet, data_p);
