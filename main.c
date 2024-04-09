@@ -83,6 +83,9 @@ int bw_curr = 0;
 long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
+struct TSAccumulator m_decoding_latency;
+// NOTE: Does not track latency to end completely
+struct TSAccumulator m_decode_and_handover_display_latency;
 
 void start_sync(int fd,bool write){
     struct dma_buf_sync sync;
@@ -530,7 +533,8 @@ void *__FRAME_THREAD__(void *param)
 
                     uint64_t feed_data_ts=mpp_frame_get_pts(frame);
                     uint64_t decoding_latency=get_time_ms()-feed_data_ts;
-                    print_time_ms("Decode",decoding_latency);
+                    accumulate_and_print("Decode",decoding_latency,&m_decoding_latency);
+                    //print_time_ms("Decode",decoding_latency);
 
                     if(develop_rendering_mode==10){
                         // Never commit anything in the display thread
@@ -553,6 +557,7 @@ void *__FRAME_THREAD__(void *param)
                         if (output_list->video_fb_id) output_list->video_skipped_frames++;
                         output_list->video_fb_id = mpi.frame_to_drm[i].fb_id;
                         output_list->video_fb_index=i;
+                        output_list->decoding_pts=feed_data_ts;
                         ret = pthread_cond_signal(&video_cond);
                         assert(!ret);
                         ret = pthread_mutex_unlock(&video_mutex);
@@ -599,6 +604,7 @@ void *__DISPLAY_THREAD__(void *param)
 		clock_gettime(CLOCK_MONOTONIC, &ats);
 		fb_id = output_list->video_fb_id;
         fb_index=output_list->video_fb_index;
+        uint64_t decoding_pts=output_list->decoding_pts;
 		if (output_list->video_skipped_frames) 
 			printf("Display skipped %d frame.\n", output_list->video_skipped_frames);
 		output_list->video_fb_id=0;
@@ -702,6 +708,9 @@ void *__DISPLAY_THREAD__(void *param)
             printf("Unknown rendering mdoe\n");
         }
 		//ret = pthread_mutex_unlock(&osd_mutex);
+
+        uint64_t decode_and_handover_display_ms=get_time_ms()-decoding_pts;
+        accumulate_and_print("D&Display",decode_and_handover_display_ms,&m_decode_and_handover_display_latency);
         
 		//assert(!ret);
 		frame_counter++;

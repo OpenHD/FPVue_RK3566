@@ -69,6 +69,8 @@ struct modeset_output {
 	int video_fb_id;
     // only used for memcpy
     int video_fb_index;
+    // Used to calculate latency
+    uint64_t decoding_pts;
 	int video_skipped_frames;
 	int video_poc;
 
