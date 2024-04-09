@@ -1011,7 +1011,7 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
     // and improve the
     // parallelism of decoder hardware and software
     // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
-    int fast_mode = 1;
+    int fast_mode = 0;
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
 
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
