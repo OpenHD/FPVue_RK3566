@@ -868,7 +868,6 @@ int read_filesrc_stream(MppPacket *packet) {
     }*/
     FILE* fp=stdin;
     int filedesc=fileno(fp);
-    printf("EHm %d\n",filedesc);
     //fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
     fd_set set;
     struct timeval timeout;
@@ -887,6 +886,7 @@ int read_filesrc_stream(MppPacket *packet) {
         }else if(rv == 0) {
             //printf("timeout\n");
         }else {
+            printf("Data\n");
             // data to read
             //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
             data_len = read(filedesc,data_p,READ_BUF_SIZE);
