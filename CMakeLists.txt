@@ -29,7 +29,7 @@ pkg_search_module(GST REQUIRED
 )
 pkg_search_module(gstreamer REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.4)
 pkg_search_module(gstreamer-app REQUIRED IMPORTED_TARGET gstreamer-app-1.0>=1.4)
-target_link_libraries(OHDVideoLib PRIVATE PkgConfig::gstreamer PkgConfig::gstreamer-app)
+target_link_libraries({PROJECT_NAME} PRIVATE PkgConfig::gstreamer PkgConfig::gstreamer-app)
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
   set(
