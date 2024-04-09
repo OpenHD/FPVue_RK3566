@@ -36,7 +36,6 @@ struct TSAccumulator{
 
 
 void accumulate_and_print(const char *tag,uint64_t ms,struct TSAccumulator* tsAccumulator){
-    uint64_t elapsed_since_last_print_ms=get_time_ms()- tsAccumulator->last_print_ms;
     if(ms>tsAccumulator->max_ms){
         tsAccumulator->max_ms=ms;
     }
@@ -45,7 +44,7 @@ void accumulate_and_print(const char *tag,uint64_t ms,struct TSAccumulator* tsAc
     }
     tsAccumulator->accumulated_ms+=ms;
     tsAccumulator->count++;
-
+    uint64_t elapsed_since_last_print_ms=get_time_ms()- tsAccumulator->last_print_ms;
     if(elapsed_since_last_print_ms>1000*1000){
         uint64_t average=tsAccumulator->accumulated_ms/tsAccumulator->count;
         printf("%s min:%ld max:%ld avg:%ld\n",tag,tsAccumulator->min_ms,tsAccumulator->max_ms,average);
