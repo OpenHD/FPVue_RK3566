@@ -1002,9 +1002,8 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
         assert(false);
     }
-    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0xffff);
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, mpp_split_mode ? 0xffff : 0);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
-    if(is_h)
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
     //set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_DEINTERLACE, 0xffff);
@@ -1012,7 +1011,7 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
     // and improve the
     // parallelism of decoder hardware and software
     // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
-    int fast_mode = 0;
+    int fast_mode = 1;
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
 
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
