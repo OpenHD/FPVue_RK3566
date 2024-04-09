@@ -46,7 +46,9 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-//#include "gstrtpreceiver.h"
+#ifdef __cplusplus
+#include "gstrtpreceiver.h"
+#endif
 
 // This buffer size has no effect on the latency -
 // 5MB should be enough, no matter how high bitrate the stream is.
@@ -885,7 +887,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 }
 
 
-/*void read_gstreamerpipe_stream(MppPacket *packet){
+void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600};
     std::shared_ptr<std::vector<uint8_t>> copy;
     auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
@@ -1245,8 +1247,8 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream(packet);
-    //read_gstreamerpipe_stream(&packet);
+    //read_filesrc_stream(packet);
+    read_gstreamerpipe_stream(packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 
