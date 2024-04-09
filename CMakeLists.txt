@@ -13,12 +13,23 @@ set(SOURCE_FILES drm.c
 				rtp.c
 				mavlink.c
 				main.c
-        copy_util.h)
+        copy_util.h
+)
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread drm m cairo)
+
+# experiment gstreamer
+find_package(PkgConfig REQUIRED)
+pkg_search_module(GST REQUIRED
+        gstreamer-1.0>=1.4
+        gstreamer-app-1.0>=1.4
+)
+pkg_search_module(gstreamer REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.4)
+pkg_search_module(gstreamer-app REQUIRED IMPORTED_TARGET gstreamer-app-1.0>=1.4)
+target_link_libraries(OHDVideoLib PRIVATE PkgConfig::gstreamer PkgConfig::gstreamer-app)
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
   set(
