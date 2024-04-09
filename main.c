@@ -1157,7 +1157,7 @@ int main(int argc, char **argv)
 
 	ret = mpp_create(&mpi.ctx, &mpi.mpi);
 	assert(!ret);
-
+    set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
     assert(!ret);
     set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
