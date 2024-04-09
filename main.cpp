@@ -883,7 +883,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600};
-    auto cb=[packet](std::shared_ptr<std::vector<uint8_t>> frame){
+    auto cb=[&packet](std::shared_ptr<std::vector<uint8_t>> frame){
         printf("Got data \n");
         void* data_p=frame->data();
         int data_len=frame->size();
