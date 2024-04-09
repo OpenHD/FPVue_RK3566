@@ -27,6 +27,7 @@ void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
     memcpy(args->dst,args->src,args->len);
     //simple_memcpy(args->dst,args->src,args->len);
+    return nullptr;
 }
 
 void memcpy_threaded(void* dest,void* src, int len,int n_threads){

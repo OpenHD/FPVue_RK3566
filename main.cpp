@@ -29,6 +29,9 @@
 #include <linux/videodev2.h>
 #include <rockchip/rk_mpi.h>
 
+#include "linux/dma-buf.h"
+
+extern "C" {
 #include "main.h"
 #include "drm.h"
 #include "osd.h"
@@ -38,7 +41,8 @@
 #include "mavlink.h"
 #include "time_util.h"
 #include "copy_util.h"
-#include "linux/dma-buf.h"
+};
+#include "gst_helper.h"
 
 // This buffer size has no effect on the latency -
 // 5MB should be enough, no matter how high bitrate the stream is.
@@ -109,13 +113,13 @@ void end_sync(int fd,bool write){
 
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
-    uint8_t * src_p=mmap(
+    void * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
     if (src_p == NULL || src_p == MAP_FAILED) {
         assert(false);
     }
-    uint8_t * dst_p=mmap(
+    void * dst_p=mmap(
             0, memory_size,    PROT_WRITE, MAP_SHARED,
             fd_dst, 0);
     if (dst_p == NULL || dst_p == MAP_FAILED) {
@@ -200,7 +204,7 @@ void initialize_output_buffers(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -214,7 +218,7 @@ void initialize_output_buffers(MppFrame  frame){
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",dmcd.size);
+        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
 
         MppBufferInfo info;
@@ -241,7 +245,7 @@ void initialize_output_buffers(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t*)&mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
 
@@ -311,7 +315,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -339,7 +343,7 @@ void initialize_output_buffers_ion(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t*)&mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
     // Can be different than n drm prime buffers.
@@ -434,7 +438,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         //
-        uint8_t * primed_framebuffer=mmap(
+        void * primed_framebuffer=mmap(
                 0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
                 dph.fd, 0);
         if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
@@ -448,7 +452,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         }
         mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",dmcd.size);
+        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
         if(i!=0){
             MppBufferInfo info;
@@ -477,7 +481,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         handles[1] = mpi.frame_to_drm[i].handle;
         offsets[1] = pitches[0] * ver_stride;
         pitches[1] = pitches[0];
-        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, &mpi.frame_to_drm[i].fb_id, 0);
+        ret = drmModeAddFB2(drm_fd, output_list->video_frm_width, output_list->video_frm_height, DRM_FORMAT_NV12, handles, pitches, offsets, (uint32_t *)&mpi.frame_to_drm[i].fb_id, 0);
         assert(!ret);
     }
 
@@ -767,7 +771,7 @@ void sig_handler(int signum)
 int mpp_split_mode = 0;
 
 int enable_dvr = 0;
-char * dvr_file;
+const char * dvr_file;
 
 int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	// Create socket
@@ -785,7 +789,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 	printf("listening on socket %d\n", port);
 
-	uint8_t* rx_buffer = malloc(READ_BUF_SIZE);
+	uint8_t* rx_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
     
 	int nalStart = 0;
 	int poc = 0;
@@ -970,7 +974,7 @@ void printHelp() {
   );
 }
 
-void set_control_verbose(MppApi * mpi,  MppCtx ctx,int control,RK_U32 enable){
+void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable){
     RK_U32 res = mpi->control(ctx, control, &enable);
     if(res){
         printf("Could not set control %d %d\n",control,enable);
@@ -1074,8 +1078,8 @@ int main(int argc, char **argv)
 	__OnArgument("--osd-elements") {
 		osd_vars.enable_video = 0;
 		osd_vars.enable_wfbng = 0;
-		char* elements = __ArgValue;
-		char* element = strtok(elements, ",");
+		const char* elements = __ArgValue;
+		const char* element = strtok((char*)elements, ",");
 		while( element != NULL ) {
 			if (!strcmp(element, "video")) {
 				osd_vars.enable_video = 1;
@@ -1095,8 +1099,8 @@ int main(int argc, char **argv)
 	}
 	
 	__OnArgument("--screen-mode") {
-		char* mode = __ArgValue;
-		mode_width = atoi(strtok(mode, "x"));
+		const char* mode = __ArgValue;
+		mode_width = atoi(strtok((char*)mode, "x"));
 		mode_height = atoi(strtok(NULL, "@"));
 		mode_vrefresh = atoi(strtok(NULL, "@"));
 		continue;
@@ -1107,8 +1111,8 @@ int main(int argc, char **argv)
         continue;
     }
     __OnArgument("--rmode") {
-        char* mode = __ArgValue;
-        develop_rendering_mode= atoi(mode);
+        const char* mode = __ArgValue;
+        develop_rendering_mode= atoi((char*)mode);
         continue;
     }
 
@@ -1150,7 +1154,7 @@ int main(int argc, char **argv)
 	////////////////////////////////// MPI SETUP
 	MppPacket packet;
 
-	uint8_t* nal_buffer = malloc(READ_BUF_SIZE);
+	uint8_t* nal_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
 	assert(nal_buffer);
 	ret = mpp_packet_init(&packet, nal_buffer, READ_BUF_SIZE);
 	assert(!ret);
@@ -1184,7 +1188,7 @@ int main(int argc, char **argv)
 			ret = pthread_create(&tid_mavlink, NULL, __MAVLINK_THREAD__, &signal_flag);
 			assert(!ret);
 		}
-		osd_thread_params *args = malloc(sizeof *args);
+		osd_thread_params *args = (osd_thread_params *)malloc(sizeof *args);
         args->fd = drm_fd;
         args->out = output_list;
 		ret = pthread_create(&tid_osd, NULL, __OSD_THREAD__, args);
@@ -1194,7 +1198,7 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream(packet);
+    read_filesrc_stream(&packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 

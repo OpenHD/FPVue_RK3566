@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-set(CMAKE_C_COMPILER "/usr/bin/gcc")
+#set(CMAKE_C_COMPILER "/usr/bin/gcc")
 
 project(fpvue)
 
@@ -12,8 +12,9 @@ set(SOURCE_FILES drm.c
 				osd.c
 				rtp.c
 				mavlink.c
-				main.c
+        main.cpp
         copy_util.h
+        gst_helper.h
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
