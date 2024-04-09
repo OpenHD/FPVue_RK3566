@@ -1034,24 +1034,18 @@ void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable)
 }
 
 void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
-
     // config for runtime mode
     MppDecCfg cfg       = NULL;
-    RK_U32 need_split   = 1;
-
     mpp_dec_cfg_init(&cfg);
-
-    /* get default config from decoder context */
+    // get default config from decoder context
     int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
     if (ret) {
         printf("%p failed to get decoder cfg ret %d\n", ctx, ret);
         assert(false);
     }
-
-    /*
-     * split_parse is to enable mpp internal frame spliter when the input
-     * packet is not aplited into frames.
-     */
+    // split_parse is to enable mpp internal frame spliter when the input
+    // packet is not aplited into frames.
+    RK_U32 need_split   = 1;
     ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
     if (ret) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
@@ -1062,7 +1056,7 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
         assert(false);
     }
-    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0); // mpp_split_mode ? 0xffff : 0
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, mpp_split_mode ? 0xffff : 0);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
