@@ -868,25 +868,25 @@ int read_filesrc_stream(MppPacket *packet) {
     }*/
     FILE* fp=stdin;
     int filedesc=fileno(fp);
-    //fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
-    fd_set set;
+    fcntl(filedesc, F_SETFL, fcntl(filedesc, F_GETFL) | O_NONBLOCK);
+    /*fd_set set;
     struct timeval timeout;
     FD_ZERO(&set);
     FD_SET(filedesc, &set);
     timeout.tv_sec = 0;
-    timeout.tv_usec = 20*1000;
+    timeout.tv_usec = 20*1000;*/
     uint8_t data[READ_BUF_SIZE];
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
     while (!signal_flag){
-        int rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
-        /*if(rv == -1){
+        /*int rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
+        if(rv == -1){
             perror("select\n");
         }else if(rv == 0) {
             //printf("timeout\n");
         }else {*/
-            printf("Data\n");
+            //printf("Data\n");
             // data to read
             //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
             data_len = read(filedesc,data_p,READ_BUF_SIZE);
@@ -906,8 +906,9 @@ int read_filesrc_stream(MppPacket *packet) {
                     }
                     usleep(2 * 1000);
                 }
-            } else{
-                printf("fread should not fail after successfull select\n");
+            }else{
+                usleep(2 * 1000);
+                //printf("fread should not fail after successfull select\n");
             }
         //}
     }
