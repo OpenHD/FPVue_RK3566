@@ -1002,6 +1002,11 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
         assert(false);
     }
+    ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
+    if (ret) {
+        printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
+        assert(false);
+    }
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0xffff); // mpp_split_mode ? 0xffff : 0
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
@@ -1013,12 +1018,6 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
     // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
     int fast_mode = 0;
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
-
-    ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
-    if (ret) {
-        printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
-        assert(false);
-    }
 }
 
 // main
