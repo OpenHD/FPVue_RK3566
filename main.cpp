@@ -1248,8 +1248,8 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    read_filesrc_stream((void**)packet);
-    //read_gstreamerpipe_stream(packet);
+    //read_filesrc_stream((void**)packet);
+    read_gstreamerpipe_stream((void**)packet);
 
 	////////////////////////////////////////////// MPI CLEANUP
 
