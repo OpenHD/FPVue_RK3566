@@ -883,7 +883,8 @@ int read_filesrc_stream(MppPacket *packet) {
     }*/
     FILE* fp=stdin;
     int filedesc=fileno(fp);
-    fcntl(filedesc, F_SETFL, fcntl(filedesc, F_GETFL) | O_NONBLOCK);
+    assert(filedesc==0);
+    //fcntl(filedesc, F_SETFL, fcntl(filedesc, F_GETFL) | O_NONBLOCK);
     /*fd_set set;
     struct timeval timeout;
     FD_ZERO(&set);
