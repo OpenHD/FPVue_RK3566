@@ -867,35 +867,46 @@ int read_filesrc_stream(MppPacket *packet) {
         return 0;
     }*/
     FILE* fp=stdin;
-    fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
+    int filedesc=fileno(fp);
+    //fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
+    fd_set set;
+    struct timeval timeout;
+    FD_ZERO(&set);
+    FD_SET(filedesc, &set);
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 20*1000;
     uint8_t data[READ_BUF_SIZE];
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
-    bool first_time_has_data_logged=false;
-    bool first_time_fed_data_logged=false;
     while (!signal_flag){
-        data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
-        if(data_len>0){
-            if(!first_time_has_data_logged){
-                //printf("Got input data %d\n",data_len);
-                //printf("not logging again\n");
-                //first_time_has_data_logged=true;
+        int rv = select(filedesc + 1, &set, NULL, NULL, &timeout);
+        if(rv == -1){
+            perror("select\n");
+        }else if(rv == 0) {
+            printf("timeout\n");
+        }else {
+            // data to read
+            data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
+            if (data_len > 0) {
+                mpp_packet_set_data(packet, data_p);
+                mpp_packet_set_size(packet, data_len);
+                mpp_packet_set_pos(packet, data_p);
+                mpp_packet_set_length(packet, data_len);
+                // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
+                // or success
+                uint64_t data_feed_begin = get_time_ms();
+                while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+                    uint64_t elapsed = get_time_ms() - data_feed_begin;
+                    if (elapsed > 100) {
+                        printf("Cannot feed decoder, stalled ?\n");
+                        break;
+                    }
+                    usleep(2 * 1000);
+                }
+            } else{
+                printf("fread should not fail after successfull select\n");
             }
-            mpp_packet_set_data(packet, data_p);
-            mpp_packet_set_size(packet, data_len);
-            mpp_packet_set_pos(packet, data_p);
-            mpp_packet_set_length(packet, data_len);
-            while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-                usleep(2*1000);
-            }
-            if(!first_time_fed_data_logged){
-                //printf("Fed data\n");
-                //printf("not logging again\n");
-                //first_time_fed_data_logged=true;
-            }
-        }else{
-            usleep(2*1000);
         }
     }
     printf("Feeding eos\n");
