@@ -890,10 +890,9 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
-    std::shared_ptr<std::vector<uint8_t>> copy;
-    auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
+    int decoder_stalled_count=0;
+    auto cb=[&packet,&copy,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
-        copy=frame;
         void* data_p=frame->data();
         int data_len=frame->size();
         mpp_packet_set_data(packet, data_p);
@@ -908,7 +907,8 @@ void read_gstreamerpipe_stream(MppPacket *packet){
         while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
             uint64_t elapsed = get_time_ms() - data_feed_begin;
             if (elapsed > 100) {
-                printf("Cannot feed decoder, stalled ?\n");
+                decoder_stalled_count++;
+                printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
                 break;
             }
             usleep(2 * 1000);
