@@ -753,9 +753,9 @@ void *__DISPLAY_THREAD__(void *param)
 			max_latency = 0;
 			min_latency = 1844674407370955161;
 		}
-		
-		struct timespec rtime = frame_stats[output_list->video_poc];
-		latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
+        // NOTE: BUG video_poc out of bounds
+		//struct timespec rtime = frame_stats[output_list->video_poc];
+		//latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
 		//printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
 		
 	}
@@ -892,7 +892,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
     GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
     std::shared_ptr<std::vector<uint8_t>> copy;
     auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
-        printf("Got data \n");
+        //printf("Got data \n");
         copy=frame;
         void* data_p=frame->data();
         int data_len=frame->size();
