@@ -66,7 +66,7 @@ struct {
 	MppBufferGroup	frm_grp;
 	struct {
 		int prime_fd;
-		int fb_id;
+		uint32_t fb_id;
 		uint32_t handle;
         // only used in copy mode
         void* memory_mmap;
@@ -94,6 +94,7 @@ int bw_curr = 0;
 long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
+bool decode_h265=false;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -888,7 +889,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 
 void read_gstreamerpipe_stream(MppPacket *packet){
-    GstRtpReceiver receiver{5600};
+    GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
     std::shared_ptr<std::vector<uint8_t>> copy;
     auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
         printf("Got data \n");
@@ -1087,7 +1088,6 @@ int main(int argc, char **argv)
 	uint16_t mode_width = 0;
 	uint16_t mode_height = 0;
 	uint32_t mode_vrefresh = 0;
-    bool decode_h265=false;
 	// Load console arguments
 	__BeginParseConsoleArguments__(printHelp) 
 	
