@@ -884,7 +884,7 @@ int read_filesrc_stream(MppPacket *packet) {
         if(rv == -1){
             perror("select\n");
         }else if(rv == 0) {
-            printf("timeout\n");
+            //printf("timeout\n");
         }else {
             // data to read
             data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
