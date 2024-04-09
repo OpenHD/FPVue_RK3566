@@ -644,6 +644,7 @@ void *__DISPLAY_THREAD__(void *param)
             ret = drmHandleEvent(drm_fd, &ev);
             print_time_ms("drmModePageFlip took",elapsed_crtc);
         }else if(develop_rendering_mode==4){
+            // Unmodded kernel: dual show, 30fps video
             uint64_t before=get_time_ms();
             ret = modeset_perform_modeset(drm_fd,
                 output_list, output_list->video_request, &output_list->video_plane,
@@ -655,6 +656,8 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t elapsed_modeset=get_time_ms()-before;
             print_time_ms("modeset_perform_modeset took",elapsed_modeset);
 	    }else if(develop_rendering_mode==5){
+            // Unmodded kernel: dual show, 30fps video
+            // maybe a bit more than 30fps
             uint64_t before=get_time_ms();
             ret = drmModeSetPlane(
                     drm_fd,
@@ -683,6 +686,7 @@ void *__DISPLAY_THREAD__(void *param)
             uint64_t elapsed_memcpy=get_time_ms()-before;
             //print_time_ms("memcpy took",elapsed_memcpy);
         }else if(develop_rendering_mode==7){
+            // FPS - ?, no qopenhd
             uint64_t before=get_time_ms();
             extra_modeset_set_fb(drm_fd, output_list,&output_list->video_plane,
                                  fb_id);
@@ -725,7 +729,7 @@ void *__DISPLAY_THREAD__(void *param)
 		
 		struct timespec rtime = frame_stats[output_list->video_poc];
 		latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
-		//printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
+		printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
 		
 	}
 end:	
@@ -856,7 +860,6 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
-#define DEFAULT_PACKET_SIZE (16*1024)
 int read_filesrc_stream(MppPacket *packet) {
     /*FILE* fp = fopen("urghs.h264", "rb");
     if(!fp){
@@ -865,14 +868,14 @@ int read_filesrc_stream(MppPacket *packet) {
     }*/
     FILE* fp=stdin;
     fcntl(0, F_SETFL, fcntl(0, F_GETFL) | O_NONBLOCK);
-    uint8_t data[1024*1024];
+    uint8_t data[READ_BUF_SIZE];
     void* data_p=&data;
     int data_len=0;
     int ret = 0;
     bool first_time_has_data_logged=false;
     bool first_time_fed_data_logged=false;
     while (!signal_flag){
-        data_len = fread(data_p, 1, DEFAULT_PACKET_SIZE, fp);
+        data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
         if(data_len>0){
             if(!first_time_has_data_logged){
                 //printf("Got input data %d\n",data_len);
