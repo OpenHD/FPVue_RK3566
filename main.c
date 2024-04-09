@@ -971,20 +971,18 @@ void printHelp() {
 }
 
 void set_control_verbose(MppApi * mpi,  MppCtx ctx,int control,RK_U32 enable){
-    RK_U32 res = mpi->control(ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &enable);
+    RK_U32 res = mpi->control(ctx, control, &enable);
     if(res){
         printf("Could not set control %d %d\n",control,enable);
         assert(false);
     }
 }
 
-bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
+void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
 
     // config for runtime mode
     MppDecCfg cfg       = NULL;
     RK_U32 need_split   = 1;
-
-    int fast_mode = 1;
 
     mpp_dec_cfg_init(&cfg);
 
@@ -992,7 +990,7 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
     if (ret) {
         printf("%p failed to get decoder cfg ret %d\n", ctx, ret);
-        return false;
+        assert(false);
     }
 
     /*
@@ -1002,22 +1000,26 @@ bool weird_init_h264(MppApi * mpi,  MppCtx ctx) {
     ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
     if (ret) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
-        return false;
+        assert(false);
     }
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
+    if(is_h)
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
     //set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_DEINTERLACE, 0xffff);
+    // Docu fast mode:
+    // and improve the
+    // parallelism of decoder hardware and software
+    // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
+    int fast_mode = 0;
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
 
     ret = mpi->control(ctx, MPP_DEC_SET_CFG, cfg);
     if (ret) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
-        return false;
+        assert(false);
     }
-    mpi->control (ctx, MPP_DEC_SET_PARSER_FAST_MODE,
-                  &fast_mode);
-    return true;
 }
 
 // main
@@ -1158,26 +1160,9 @@ int main(int argc, char **argv)
 	ret = mpp_create(&mpi.ctx, &mpi.mpi);
 	assert(!ret);
 
-	ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_SPLIT_MODE, &mpp_split_mode);
-	assert(!ret);
-
-    if(!decode_h265){
-        // Docu fast mode:
-        // and improve the
-        // parallelism of decoder hardware and software
-        // we probably don't want that, since we don't need pipelining to hit our bitrate(s)
-        //int fast_mode = 1;
-        //mpi.mpi->control(mpi.ctx, MPP_DEC_SET_PARSER_FAST_MODE,
-        //              &fast_mode);
-        int immediate = 1;
-        mpi.mpi->control(mpi.ctx, MPP_DEC_SET_IMMEDIATE_OUT,
-                      &immediate);
-    }
 	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
-    if(!decode_h265){
-        weird_init_h264(mpi.mpi,mpi.ctx);
-    }
-	assert(!ret);
+    assert(!ret);
+    set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
 
 	// blocked/wait read of frame in thread
 	int param = MPP_POLL_BLOCK;
