@@ -887,7 +887,8 @@ int read_filesrc_stream(MppPacket *packet) {
             //printf("timeout\n");
         }else {
             // data to read
-            data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
+            //data_len = fread(data_p, 1, READ_BUF_SIZE, fp);
+            data_len = read(filedesc,data_p,READ_BUF_SIZE);
             if (data_len > 0) {
                 mpp_packet_set_data(packet, data_p);
                 mpp_packet_set_size(packet, data_len);
