@@ -120,8 +120,10 @@ void end_sync(int fd,bool write){
     }
 }
 
+TSAccumulator m_map_copy_unmap_accumulator;
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
+    uint64_t map_copy_unmap_begin=get_time_ms();
     void * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
@@ -147,10 +149,12 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //memcpy(dst_p,src_p,memory_size);
     uint64_t before_memcpy=get_time_ms();
     memcpy_threaded(dst_p,src_p,memory_size,3);
-    uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
-    print_time_ms("memcpy took",elapsed_memcpy);
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
+    //uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
+    //print_time_ms("memcpy took",elapsed_memcpy);
+    uint64_t map_copy_unmap_elapsed=get_time_ms()-map_copy_unmap_begin;
+    accumulate_and_print("map_copy_unmap",map_copy_unmap_elapsed,&m_map_copy_unmap_accumulator);
     //free(big_buff);
 }
 
