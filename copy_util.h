@@ -18,7 +18,7 @@ void memcpy_neon_8(uint8_t* region2, const uint8_t* region1, size_t length){
 
     uint8x8_t in;
 
-    for (uint8_t *end = region1 + length; region1 < end; region1 += 8, region2 += 8) {
+    for (const uint8_t *end = region1 + length; region1 < end; region1 += 8, region2 += 8) {
         in = vld1_u8(region1);
         vst1_u8(region1, out);
     }
