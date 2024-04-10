@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_compile_options("-Wno-address-of-packed-member")
 
+SET(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
+
 set(SOURCE_FILES drm.c
 				osd.c
 				rtp.c
@@ -17,6 +19,8 @@ set(SOURCE_FILES drm.c
         SchedulingHelper.hpp
         gstrtpreceiver.cpp
         gstrtpreceiver.h
+        #
+        #memcpymove-v7l.S
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")

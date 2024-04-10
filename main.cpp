@@ -70,7 +70,6 @@ struct {
 		uint32_t fb_id;
 		uint32_t handle;
         // only used in copy mode
-        void* memory_mmap;
         int memory_mmap_size;
 	} frame_to_drm[MAX_FRAMES];
 } mpi;
@@ -120,8 +119,13 @@ void end_sync(int fd,bool write){
     }
 }
 
+TSAccumulator m_map_copy_unmap_accumulator;
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
+    //printf("Memory size %d\n",memory_size);
+    uint8_t * test_buffer= (uint8_t*) malloc(1280*720*2);
+    assert(test_buffer!= nullptr);
+    uint64_t map_copy_unmap_begin=get_time_ms();
     void * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
             fd_src, 0);
@@ -146,12 +150,18 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
 
     //memcpy(dst_p,src_p,memory_size);
     uint64_t before_memcpy=get_time_ms();
-    memcpy_threaded(dst_p,src_p,memory_size,4);
-    uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
-    print_time_ms("memcpy took",elapsed_memcpy);
+    //memcpy_threaded(test_buffer,src_p,memory_size,3);
+    //memcpy_threaded(dst_p,test_buffer,memory_size,3);
+    memcpy_threaded(dst_p,src_p,memory_size,3);
+
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
+    //uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
+    //print_time_ms("memcpy took",elapsed_memcpy);
+    uint64_t map_copy_unmap_elapsed=get_time_ms()-map_copy_unmap_begin;
+    accumulate_and_print("map_copy_unmap",map_copy_unmap_elapsed,&m_map_copy_unmap_accumulator);
     //free(big_buff);
+    free(test_buffer);
 }
 
 void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
@@ -212,20 +222,6 @@ void initialize_output_buffers(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        //
-        void * primed_framebuffer=mmap(
-                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                dph.fd, 0);
-        if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
-            printf(
-                    "Could not map buffer exported through PRIME : %s (%d)\n"
-                    "Buffer : %p\n",
-                    strerror(ret), ret,
-                    primed_framebuffer
-            );
-            assert(false);
-        }
-        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
         printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
@@ -323,20 +319,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        //
-        void * primed_framebuffer=mmap(
-                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                dph.fd, 0);
-        if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
-            printf(
-                    "Could not map buffer exported through PRIME : %s (%d)\n"
-                    "Buffer : %p\n",
-                    strerror(ret), ret,
-                    primed_framebuffer
-            );
-            assert(false);
-        }
-        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         //
         mpi.frame_to_drm[i].prime_fd = dph.fd; // dups fd
         lol_width=dmcd.width;
@@ -446,20 +428,6 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
             ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &dph);
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
-        //
-        void * primed_framebuffer=mmap(
-                0, dmcd.size,    PROT_READ | PROT_WRITE, MAP_SHARED,
-                dph.fd, 0);
-        if (primed_framebuffer == NULL || primed_framebuffer == MAP_FAILED) {
-            printf(
-                    "Could not map buffer exported through PRIME : %s (%d)\n"
-                    "Buffer : %p\n",
-                    strerror(ret), ret,
-                    primed_framebuffer
-            );
-            assert(false);
-        }
-        mpi.frame_to_drm[i].memory_mmap=primed_framebuffer;
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
         printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
