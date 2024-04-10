@@ -121,6 +121,7 @@ void end_sync(int fd,bool write){
 }
 
 TSAccumulator m_map_copy_unmap_accumulator;
+uint8_t test_buffer[1920*1080*2];
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
     uint64_t map_copy_unmap_begin=get_time_ms();
@@ -148,7 +149,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
 
     //memcpy(dst_p,src_p,memory_size);
     uint64_t before_memcpy=get_time_ms();
-    memcpy_threaded(dst_p,src_p,memory_size,3);
+    memcpy_threaded(&test_buffer,src_p,memory_size,3);
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
     //uint64_t elapsed_memcpy=get_time_ms()-before_memcpy;
