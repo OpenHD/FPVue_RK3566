@@ -48,6 +48,7 @@ extern "C" {
 #endif
 #ifdef __cplusplus
 #include "gstrtpreceiver.h"
+#include "SchedulingHelper.hpp"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -95,6 +96,7 @@ long long bw_stats[10];
 int video_zpos = 1;
 int develop_rendering_mode=0;
 bool decode_h265=false;
+int gst_udp_port=-1;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -507,6 +509,7 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
 
 void *__FRAME_THREAD__(void *param)
 {
+    SchedulingHelper::set_thread_params_max_realtime("FRAME_THREAD",SchedulingHelper::PRIORITY_REALTIME_MID);
 	int ret;
 	int i;	
 	MppFrame  frame  = NULL;
@@ -589,6 +592,9 @@ void *__FRAME_THREAD__(void *param)
 
 void *__DISPLAY_THREAD__(void *param)
 {
+    // With the proper rendering mode(s) this thread
+    // doesn't hog the CPU
+    SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
 	int ret;	
 	int frame_counter = 0;
 	uint64_t latency_avg[200];
@@ -889,11 +895,17 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 
 
 void read_gstreamerpipe_stream(MppPacket *packet){
-    GstRtpReceiver receiver{5600,decode_h265 ? 1 : 0};
-    std::shared_ptr<std::vector<uint8_t>> copy;
-    auto cb=[&packet,&copy](std::shared_ptr<std::vector<uint8_t>> frame){
+    assert(gst_udp_port!=-1);
+    GstRtpReceiver receiver{gst_udp_port,decode_h265 ? 1 : 0};
+    int decoder_stalled_count=0;
+    auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
-        copy=frame;
+        // Let the gst pull thread run at quite high priority
+        static bool first= false;
+        if(first){
+            SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+            first= false;
+        }
         void* data_p=frame->data();
         int data_len=frame->size();
         mpp_packet_set_data(packet, data_p);
@@ -908,7 +920,8 @@ void read_gstreamerpipe_stream(MppPacket *packet){
         while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
             uint64_t elapsed = get_time_ms() - data_feed_begin;
             if (elapsed > 100) {
-                printf("Cannot feed decoder, stalled ?\n");
+                decoder_stalled_count++;
+                printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
                 break;
             }
             usleep(2 * 1000);
@@ -1020,6 +1033,8 @@ void printHelp() {
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
     "\n"
+    "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
+    "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n", __DATE__
   );
@@ -1034,24 +1049,18 @@ void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable)
 }
 
 void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
-
     // config for runtime mode
     MppDecCfg cfg       = NULL;
-    RK_U32 need_split   = 1;
-
     mpp_dec_cfg_init(&cfg);
-
-    /* get default config from decoder context */
+    // get default config from decoder context
     int ret = mpi->control(ctx, MPP_DEC_GET_CFG, cfg);
     if (ret) {
         printf("%p failed to get decoder cfg ret %d\n", ctx, ret);
         assert(false);
     }
-
-    /*
-     * split_parse is to enable mpp internal frame spliter when the input
-     * packet is not aplited into frames.
-     */
+    // split_parse is to enable mpp internal frame spliter when the input
+    // packet is not aplited into frames.
+    RK_U32 need_split   = 1;
     ret = mpp_dec_cfg_set_u32(cfg, "base:split_parse", need_split);
     if (ret) {
         printf("%p failed to set split_parse ret %d\n", ctx, ret);
@@ -1062,7 +1071,7 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
         assert(false);
     }
-    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, 0); // mpp_split_mode ? 0xffff : 0
+    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, mpp_split_mode ? 0xffff : 0);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
@@ -1160,6 +1169,10 @@ int main(int argc, char **argv)
         decode_h265=true;
         continue;
     }
+    __OnArgument("--gst-udp-port") {
+        gst_udp_port=atoi(__ArgValue);
+        continue;
+    }
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
@@ -1248,8 +1261,11 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    //read_filesrc_stream((void**)packet);
-    read_gstreamerpipe_stream((void**)packet);
+    if(gst_udp_port==-1){
+        read_filesrc_stream((void**)packet);
+    }else{
+        read_gstreamerpipe_stream((void**)packet);
+    }
 
 	////////////////////////////////////////////// MPI CLEANUP
 
