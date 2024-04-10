@@ -12,7 +12,7 @@
 
 
 extern "C"{
-void *mempcpy(void * restrict s1, const void * restrict s2, size_t n);
+void *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
 };
 
 void simple_memcpy (char *dst, const char *src, size_t n)
