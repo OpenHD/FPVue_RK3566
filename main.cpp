@@ -121,7 +121,7 @@ void end_sync(int fd,bool write){
 }
 
 TSAccumulator m_map_copy_unmap_accumulator;
-uint8_t test_buffer[1920*1080*2];
+uint8_t test_buffer[1920*1080*6];
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
     //printf("Memory size %d\n",memory_size);
