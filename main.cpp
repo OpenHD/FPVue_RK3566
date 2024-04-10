@@ -124,7 +124,8 @@ TSAccumulator m_map_copy_unmap_accumulator;
 void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     //printf("map_copy_unmap\n");
     //printf("Memory size %d\n",memory_size);
-    uint8_t * test_buffer= (uint8_t*) malloc(1920*1080*6);
+    uint8_t * test_buffer= (uint8_t*) malloc(1280*720*2);
+    assert(test_buffer!= nullptr);
     uint64_t map_copy_unmap_begin=get_time_ms();
     void * src_p=mmap(
             0, memory_size,    PROT_READ, MAP_PRIVATE,
