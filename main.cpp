@@ -152,7 +152,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     uint64_t before_memcpy=get_time_ms();
     //memcpy_threaded(test_buffer,src_p,memory_size,3);
     //memcpy_threaded(dst_p,test_buffer,memory_size,3);
-    memcpy_threaded(dst_p,src_p,memory_size/2,3);
+    memcpy_threaded(dst_p,src_p,memory_size,3);
 
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
