@@ -25,7 +25,8 @@ struct memcpy_args_t {
 };
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
-    memcpy(args->dst,args->src,args->len);
+    //memcpy(args->dst,args->src,args->len);
+    memmove(args->dst,args->src,args->len);
     //simple_memcpy(args->dst,args->src,args->len);
     return NULL;
 }
