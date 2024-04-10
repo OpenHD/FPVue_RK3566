@@ -11,7 +11,7 @@
 #include <string.h>
 
 
-void *mymemcpy(void * restrict s1, const void * restrict s2, size_t n);
+extern "C" void *__mempcpy(void * restrict s1, const void * restrict s2, size_t n);
 
 void simple_memcpy (char *dst, const char *src, size_t n)
 {
@@ -27,7 +27,7 @@ struct memcpy_args_t {
 };
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
-    mymemcpy(args->dst,args->src,args->len);
+    __mempcpy(args->dst,args->src,args->len);
     //memmove(args->dst,args->src,args->len);
     //simple_memcpy(args->dst,args->src,args->len);
     return NULL;
