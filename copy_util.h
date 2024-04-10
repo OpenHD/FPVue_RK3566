@@ -13,22 +13,21 @@
 
 #include <arm_neon.h>
 
-void memcpy_neon_8(void* region2, const void * region1, size_t length){
+void memcpy_neon_8(uint8_t* region2, const uint8_t* region1, size_t length){
     assert(length % 8 == 0);
 
-    uint8_t *end;
     uint8x8_t in;
 
-    for (end = region1 + length; region1 < end; region1 += 8, region2 += 8) {
-        in = vld1_u8((const uint8_t *)region1);
-        vst1_u8((uint8_t *)region1, out);
+    for (uint8_t *end = region1 + length; region1 < end; region1 += 8, region2 += 8) {
+        in = vld1_u8(region1);
+        vst1_u8(region1, out);
     }
 }
 
 
 void memcpy_neon_aligned(void* dst, const void * src, size_t length){
     int len_fast=length % 8;
-    memcpy_neon_8(dst,src,len_fast);
+    memcpy_neon_8((uint8_t*)dst,(const uint8_t*)src,len_fast);
     int len_slow=length-len_fast;
     if(len_slow>0){
         memcpy(dst+len_fast,src+len_fast,len_slow);
