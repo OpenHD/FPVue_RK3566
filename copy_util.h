@@ -11,7 +11,9 @@
 #include <string.h>
 
 
-extern "C" void *__mempcpy(void * restrict s1, const void * restrict s2, size_t n);
+extern "C"{
+    void *__mempcpy(void * restrict s1, const void * restrict s2, size_t n);
+};
 
 void simple_memcpy (char *dst, const char *src, size_t n)
 {
