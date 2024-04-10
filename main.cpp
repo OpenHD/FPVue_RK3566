@@ -151,12 +151,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
 
     //memcpy(dst_p,src_p,memory_size);
     uint64_t before_memcpy=get_time_ms();
-    //memcpy_threaded(test_buffer,src_p,memory_size,3);
-    //int random_byte_index=get_time_ms() % memory_size;
-    //printf("random byte %d\n",(int)test_buffer[random_byte_index]);
-    //memcpy_threaded(dst_p,test_buffer,memory_size,3);
-    int random_byte_index=get_time_ms() % memory_size;
-    test_buffer[random_byte_index]=255;
+    memcpy_threaded(test_buffer,src_p,memory_size,3);
     memcpy_threaded(dst_p,test_buffer,memory_size,3);
 
     end_sync(fd_src,false);
