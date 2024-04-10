@@ -20,7 +20,7 @@ set(SOURCE_FILES drm.c
         gstrtpreceiver.cpp
         gstrtpreceiver.h
         #
-        memcpymove-v7l.S
+        #memcpymove-v7l.S
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
