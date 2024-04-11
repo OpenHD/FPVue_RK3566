@@ -32,14 +32,14 @@ void memcpy_neon_16bytes(uint8_t* region2, const uint8_t* region1, size_t length
 void memcpy_neon_32bytes(uint8_t* region2, const uint8_t* region1, size_t length){
     assert(length % 32 == 0);
     uint8x8x4_t in;
-    for (const uint8_t *end = region1 + length; region1 < end; region1 += 16, region2 += 16) {
+    for (const uint8_t *end = region1 + length; region1 < end; region1 += 32, region2 += 32) {
         in = vld4_u8(region1);
         vst4_u8(region2, in);
     }
 }
 
 void memcpy_neon_aligned(void* dst, const void * src, size_t length){
-    int len_fast=length % 32;
+    int len_fast=length-(length % 16);
     memcpy_neon_16bytes((uint8_t*)dst,(const uint8_t*)src,len_fast);
     int len_slow=length-len_fast;
     if(len_slow>0){
@@ -67,6 +67,7 @@ struct memcpy_args_t {
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
     mempcpy(args->dst,args->src,args->len);
+    //memcpy_neon_aligned(args->dst,args->src,args->len);
     //memmove(args->dst,args->src,args->len);
     //simple_memcpy(args->dst,args->src,args->len);
     return NULL;
