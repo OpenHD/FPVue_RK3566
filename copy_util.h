@@ -39,8 +39,8 @@ void memcpy_neon_32bytes(uint8_t* region2, const uint8_t* region1, size_t length
 }
 
 void memcpy_neon_aligned(void* dst, const void * src, size_t length){
-    int len_fast=length-(length % 32);
-    memcpy_neon_32bytes((uint8_t*)dst,(const uint8_t*)src,len_fast);
+    int len_fast=length-(length % 16);
+    memcpy_neon_16bytes((uint8_t*)dst,(const uint8_t*)src,len_fast);
     int len_slow=length-len_fast;
     if(len_slow>0){
         memcpy(dst+len_fast,src+len_fast,len_slow);
