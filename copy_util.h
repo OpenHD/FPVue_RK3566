@@ -32,7 +32,7 @@ void memcpy_neon_16bytes(uint8_t* region2, const uint8_t* region1, size_t length
 void memcpy_neon_32bytes(uint8_t* region2, const uint8_t* region1, size_t length){
     assert(length % 32 == 0);
     uint8x8x4_t in;
-    for (const uint8_t *end = region1 + length; region1 < end; region1 += 16, region2 += 16) {
+    for (const uint8_t *end = region1 + length; region1 < end; region1 += 32, region2 += 32) {
         in = vld4_u8(region1);
         vst4_u8(region2, in);
     }
