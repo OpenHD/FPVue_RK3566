@@ -50,7 +50,7 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 
 extern "C"{
 // The memcpymove-v7l.S impl
-v//oid *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
+//void *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
 // memcpy from arm repo
 //void *__memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_simd(void * __restrict s1, const void * __restrict s2, size_t n);
