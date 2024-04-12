@@ -53,6 +53,7 @@
    The loop tail is handled by always copying 64 bytes from the end.
 */
 
+global __memcpy_aarch64
 ENTRY_ALIAS (__memmove_aarch64)
 ENTRY (__memcpy_aarch64)
 	PTR_ARG (0)
@@ -240,4 +241,3 @@ L(copy64_from_start):
 	ret
 
 END (__memcpy_aarch64)
-
