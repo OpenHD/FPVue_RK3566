@@ -52,7 +52,7 @@ extern "C"{
 // The memcpymove-v7l.S impl
 //void *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
 // memcpy from arm repo
-void *__memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
+void *memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_simd(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_sve(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_sve (void *__restrict, const void *__restrict, size_t);
@@ -72,7 +72,7 @@ struct memcpy_args_t {
 };
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
-    __memcpy_aarch64(args->dst,args->src,args->len);
+    memcpy_aarch64(args->dst,args->src,args->len);
     //__memcpy_aarch64_sve(args->dst,args->src,args->len);
     //mempcpy(args->dst,args->src,args->len);
     //memcpy_neon_aligned(args->dst,args->src,args->len);
