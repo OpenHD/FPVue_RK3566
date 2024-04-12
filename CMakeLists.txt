@@ -23,7 +23,6 @@ set(SOURCE_FILES drm.c
         #
         #assembly/memcpymove-v7l.S
         #assembly/memcpy-sve.S
-        assembly/memcpy.S
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo" )
