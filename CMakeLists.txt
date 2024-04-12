@@ -7,6 +7,7 @@ project(fpvue)
 set(CMAKE_CXX_STANDARD 17)
 
 add_compile_options("-Wno-address-of-packed-member")
+add_compile_options("-Wno-address-of-packed-member")
 
 SET(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
@@ -28,7 +29,7 @@ set(SOURCE_FILES drm.c
 include_directories("/usr/include/libdrm" "/usr/include/cairo")
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread drm m cairo astring)
+target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread drm m cairo -lastring)
 
 # experiment gstreamer
 find_package(PkgConfig REQUIRED)
