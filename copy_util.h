@@ -52,7 +52,7 @@ extern "C"{
 // The memcpymove-v7l.S impl
 //void *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
 // memcpy from arm repo
-void *memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
+//void *memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_simd(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_sve(void * __restrict s1, const void * __restrict s2, size_t n);
 //void *__memcpy_aarch64_sve (void *__restrict, const void *__restrict, size_t);
