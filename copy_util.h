@@ -49,7 +49,7 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 
 // From https://stackoverflow.com/questions/34888683/arm-neon-memcpy-optimized-for-uncached-memory
 // and https://stackoverflow.com/questions/61210517/memcpy-for-arm-uncached-memory-for-arm64
-void my_copy(volatile unsigned char *dst, volatile unsigned char *src, int sz){
+void my_copy(volatile unsigned char *dst, volatile const unsigned char *src, int sz){
     if (sz & 63) {
         sz = (sz & -64) + 64;
     }
