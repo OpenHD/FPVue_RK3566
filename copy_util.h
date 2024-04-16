@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <string.h>
 
-
+#define __ARM__
 /*#include <arm_neon.h>
 
 void memcpy_neon_8bytes(uint8_t* region2, const uint8_t* region1, size_t length){
