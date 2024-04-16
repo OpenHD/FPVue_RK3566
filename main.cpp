@@ -96,6 +96,7 @@ int video_zpos = 1;
 int develop_rendering_mode=0;
 bool decode_h265=false;
 int gst_udp_port=-1;
+bool x20_apply_fixes=false;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -912,6 +913,10 @@ void read_gstreamerpipe_stream(MppPacket *packet){
         }
         feed_packet_to_decoder(packet,frame->data(),frame->size());
     };
+    if(x20_apply_fixes){
+        printf("Applying x20 hack\n");
+        configure_x20(packet);
+    }
     receiver.start_receiving(cb);
     while (!signal_flag){
         sleep(1);
@@ -1006,6 +1011,8 @@ void printHelp() {
     "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
     "\n"
     "    --rmode      - different rendering modes for development \n"
+    "\n"
+    "    --x20      - specific x20 fixe(s) \n"
     "\n", __DATE__
   );
 }
@@ -1146,6 +1153,11 @@ int main(int argc, char **argv)
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
+        continue;
+    }
+    __OnArgument("--x20") {
+        const char* mode = __ArgValue;
+        x20_apply_fixes= true;
         continue;
     }
 
