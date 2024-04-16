@@ -97,7 +97,6 @@ void* memcpy_data_function(void* args_uncast){
 #ifdef __ARM__
     //mempcpy(args->dst,args->src,args->len);
     my_copy(args->dst,args->src,args->len);
-    printf("X\n");
 #else
     memcpy(args->dst,args->src,args->len);
 #endif
