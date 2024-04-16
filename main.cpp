@@ -96,6 +96,7 @@ int video_zpos = 1;
 int develop_rendering_mode=0;
 bool decode_h265=false;
 int gst_udp_port=-1;
+bool x20_apply_fixes=false;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -861,11 +862,47 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	}
 }
 
+int decoder_stalled_count=0;
+bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
+    mpp_packet_set_data(packet, data_p);
+    mpp_packet_set_size(packet, data_len);
+    mpp_packet_set_pos(packet, data_p);
+    mpp_packet_set_length(packet, data_len);
+    mpp_packet_set_pts(packet,(RK_S64) get_time_ms());
+    // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
+    // or success
+    uint64_t data_feed_begin = get_time_ms();
+    int ret=0;
+    while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+        uint64_t elapsed = get_time_ms() - data_feed_begin;
+        if (elapsed > 100) {
+            decoder_stalled_count++;
+            printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
+            return false;
+            break;
+        }
+        usleep(2 * 1000);
+    }
+    return true;
+}
+
+void configure_x20(MppPacket *packet){
+    FILE *fp = fopen("/usr/local/bin/Header.h264", "rb");
+    assert(fp);
+    fseek(fp, 0L, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0L, SEEK_SET);
+    assert(size>0);
+    std::vector<uint8_t> tmp_data(size);
+    long read_len=fread(tmp_data.data(), 1, size, fp);
+    assert(read_len==size);
+    fclose(fp);
+    feed_packet_to_decoder(packet,tmp_data.data(),size);
+}
 
 void read_gstreamerpipe_stream(MppPacket *packet){
     assert(gst_udp_port!=-1);
     GstRtpReceiver receiver{gst_udp_port,decode_h265 ? 1 : 0};
-    int decoder_stalled_count=0;
     auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
         // Let the gst pull thread run at quite high priority
@@ -874,27 +911,12 @@ void read_gstreamerpipe_stream(MppPacket *packet){
             SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
             first= false;
         }
-        void* data_p=frame->data();
-        int data_len=frame->size();
-        mpp_packet_set_data(packet, data_p);
-        mpp_packet_set_size(packet, data_len);
-        mpp_packet_set_pos(packet, data_p);
-        mpp_packet_set_length(packet, data_len);
-        mpp_packet_set_pts(packet,(RK_S64) get_time_ms());
-        // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
-        // or success
-        uint64_t data_feed_begin = get_time_ms();
-        int ret=0;
-        while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-            uint64_t elapsed = get_time_ms() - data_feed_begin;
-            if (elapsed > 100) {
-                decoder_stalled_count++;
-                printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
-                break;
-            }
-            usleep(2 * 1000);
-        }
+        feed_packet_to_decoder(packet,frame->data(),frame->size());
     };
+    if(x20_apply_fixes){
+        printf("Applying x20 hack\n");
+        configure_x20(packet);
+    }
     receiver.start_receiving(cb);
     while (!signal_flag){
         sleep(1);
@@ -945,22 +967,7 @@ int read_filesrc_stream(MppPacket *packet) {
             data_len = read(STDIN_FILENO,data_p,READ_BUF_SIZE);
             if (data_len > 0) {
                 //printf("Got %d\n",data_len);
-                mpp_packet_set_data(packet, data_p);
-                mpp_packet_set_size(packet, data_len);
-                mpp_packet_set_pos(packet, data_p);
-                mpp_packet_set_length(packet, data_len);
-                mpp_packet_set_pts(packet,get_time_ms());
-                // Feed the data to mpp until either timeout (in which case the decoder might have stalled)
-                // or success
-                uint64_t data_feed_begin = get_time_ms();
-                while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-                    uint64_t elapsed = get_time_ms() - data_feed_begin;
-                    if (elapsed > 100) {
-                        printf("Cannot feed decoder, stalled ?\n");
-                        break;
-                    }
-                    usleep(2 * 1000);
-                }
+                feed_packet_to_decoder(packet,data_p,data_len);
             }else{
                 usleep(2 * 1000);
                 //printf("fread should not fail after successfull select\n");
@@ -1004,6 +1011,8 @@ void printHelp() {
     "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
     "\n"
     "    --rmode      - different rendering modes for development \n"
+    "\n"
+    "    --x20      - specific x20 fixe(s) \n"
     "\n", __DATE__
   );
 }
@@ -1144,6 +1153,11 @@ int main(int argc, char **argv)
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
+        continue;
+    }
+    __OnArgument("--x20") {
+        const char* mode = __ArgValue;
+        x20_apply_fixes= true;
         continue;
     }
 

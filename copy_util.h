@@ -11,7 +11,7 @@
 #include <string.h>
 
 
-#include <arm_neon.h>
+/*#include <arm_neon.h>
 
 void memcpy_neon_8bytes(uint8_t* region2, const uint8_t* region1, size_t length){
     assert(length % 8 == 0);
@@ -45,12 +45,19 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
     if(len_slow>0){
         memcpy(dst+len_fast,src+len_fast,len_slow);
     }
-}
+}*/
 
-
+#ifdef __ARM__
 extern "C"{
+// The memcpymove-v7l.S impl
 void *mempcpy(void * __restrict s1, const void * __restrict s2, size_t n);
+// memcpy from arm repo
+//void *__memcpy_aarch64(void * __restrict s1, const void * __restrict s2, size_t n);
+//void *__memcpy_aarch64_simd(void * __restrict s1, const void * __restrict s2, size_t n);
+//void *__memcpy_aarch64_sve(void * __restrict s1, const void * __restrict s2, size_t n);
+//void *__memcpy_aarch64_sve (void *__restrict, const void *__restrict, size_t);
 };
+#endif
 
 void simple_memcpy (char *dst, const char *src, size_t n)
 {
@@ -66,7 +73,15 @@ struct memcpy_args_t {
 };
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
+#ifdef __ARM__
     mempcpy(args->dst,args->src,args->len);
+#else
+    memcpy(args->dst,args->src,args->len);
+#endif
+    //mempcpy(args->dst,args->src,args->len);
+    //__memcpy_aarch64(args->dst,args->src,args->len);
+    //__memcpy_aarch64_sve(args->dst,args->src,args->len);
+    //mempcpy(args->dst,args->src,args->len);
     //memcpy_neon_aligned(args->dst,args->src,args->len);
     //memmove(args->dst,args->src,args->len);
     //simple_memcpy(args->dst,args->src,args->len);
