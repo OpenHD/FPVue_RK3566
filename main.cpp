@@ -879,7 +879,6 @@ bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
             decoder_stalled_count++;
             printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
             return false;
-            break;
         }
         usleep(2 * 1000);
     }
@@ -887,7 +886,7 @@ bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
 }
 
 void configure_x20(MppPacket *packet){
-    FILE *fp = fopen("/usr/local/bin/Header.h264", "rb");
+    FILE *fp = fopen("/usr/local/bin/x20_header.h264", "rb");
     assert(fp);
     fseek(fp, 0L, SEEK_END);
     long size = ftell(fp);
