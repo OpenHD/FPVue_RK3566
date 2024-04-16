@@ -47,6 +47,21 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
     }
 }*/
 
+// From https://stackoverflow.com/questions/34888683/arm-neon-memcpy-optimized-for-uncached-memory
+void my_copy(unsigned char *dst,unsigned char *src, int sz){
+    if (sz & 63) {
+        sz = (sz & -64) + 64;
+    }
+    asm volatile (
+            "NEONCopyPLD:                          \n"
+            "    VLDM %[src]!,{d0-d7}                 \n"
+            "    VSTM %[dst]!,{d0-d7}                 \n"
+            "    SUBS %[sz],%[sz],#0x40                 \n"
+            "    BGT NEONCopyPLD                  \n"
+            : [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz) : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
+}
+
+
 #ifdef __ARM__
 extern "C"{
 // The memcpymove-v7l.S impl
@@ -74,7 +89,8 @@ struct memcpy_args_t {
 void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
 #ifdef __ARM__
-    mempcpy(args->dst,args->src,args->len);
+    //mempcpy(args->dst,args->src,args->len);
+    my_copy(args->dst,args->src,args->len);
 #else
     memcpy(args->dst,args->src,args->len);
 #endif
