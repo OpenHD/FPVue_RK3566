@@ -63,7 +63,8 @@ void my_copy(volatile unsigned char *dst, volatile unsigned char *src, int sz){
                   "add %[src], %[src], #64 \n"
                   "stnp q0, q1, [%[dst]] \n"
                   "stnp q2, q3, [%[dst], #32] \n"
-                  "b.gt 1b \n");
+                  "b.gt 1b \n"
+            : [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz) : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
 }
 
 
