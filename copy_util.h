@@ -56,7 +56,6 @@ void my_copy(volatile void *dst, volatile const void *src, int sz){
     asm volatile ("NEONCopyPLD: \n"
                   "sub %[dst], %[dst], #64 \n"
                   "1: \n"
-                   "pld [r1, #0xC0]\n" //预取数据
                   "ldnp q0, q1, [%[src]] \n"
                   "ldnp q2, q3, [%[src], #32] \n"
                   "add %[dst], %[dst], #64 \n"
