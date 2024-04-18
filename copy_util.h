@@ -82,18 +82,12 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, size_t n)
 {
     asm("NEONCopyPLD:\n"
-        "\n"
-        "          PLD   [r1,     #0x80]\n"
-        "\n"
-        "          VLDM  r1!,     {d0-d15}   #EIMmem read 128byte\n"
-        "\n"
-        "          PLDW  [r0,     #0x80]\n"
-        "\n"
-        "          VSTM  r0!,     {d0-d15}  #EIMmem write  128byte\n"
-        "\n"
-        "          SUBS  r2,  r2, #0x80\n"
-        "\n"
-        "          BGT NEONCopyPLD");
+        "PLD   [r1,     #0x80]\n"
+        "VLDM  r1!,     {d0-d15}\n" //EIMmem read 128byte
+        "PLDW  [r0,     #0x80]\n"
+        "VSTM  r0!,     {d0-d15}  \n" //EIMmem write  128byte
+        "SUBS  r2,  r2, #0x80\n"
+        "BGT NEONCopyPLD");
 }
 
 
