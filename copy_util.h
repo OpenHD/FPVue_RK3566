@@ -49,7 +49,7 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 
 // From https://stackoverflow.com/questions/34888683/arm-neon-memcpy-optimized-for-uncached-memory
 // and https://stackoverflow.com/questions/61210517/memcpy-for-arm-uncached-memory-for-arm64
-/*void my_copy(volatile void *dst, volatile const void *src, int sz){
+void my_copy(volatile void *dst, volatile const void *src, int sz){
     if (sz & 63) {
         sz = (sz & -64) + 64;
     }
@@ -65,10 +65,10 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
                   "stnp q2, q3, [%[dst], #32] \n"
                   "b.gt 1b \n"
             : [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz) : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
-}*/
+}
 // https://wx.comake.online/doc/doc/SigmaStarDocs-SSC9341_Ispahan-ULS00V040-20210913/customer/faq/i6b0/system/i6b0/neon.html
 // https://community.nxp.com/t5/i-MX-Processors/iMX6-EIM-transfer-speed-with-using-NEON-vld-vst-instructions/m-p/312256
-void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
+/*void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
 {
     asm(
             "NEONCopyPLD:\n"
@@ -78,7 +78,7 @@ void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, siz
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );
-}
+}*/
 
 
 #ifdef __ARM__
@@ -109,8 +109,8 @@ void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
 #ifdef __ARM__
     //mempcpy(args->dst,args->src,args->len);
-    //my_copy(args->dst,args->src,args->len);
-    memcpy_neon_pld(args->dst,args->src,args->len);
+    my_copy(args->dst,args->src,args->len);
+    //memcpy_neon_pld(args->dst,args->src,args->len);
 #else
     memcpy(args->dst,args->src,args->len);
 #endif
