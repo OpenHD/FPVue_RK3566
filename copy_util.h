@@ -85,7 +85,7 @@ void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, si
         "PLD   [r1,     #0x80]\n"
         "VLDM  r1!,     {d0-d15}\n" //EIMmem read 128byte
         "PLDW  [r0,     #0x80]\n"
-        "VSTM  r0!,     {d0-d15}  \n" //EIMmem write  128byte
+        "VSTM  r0!,     {d0-d15}\n" //EIMmem write  128byte
         "SUBS  r2,  r2, #0x80\n"
         "BGT NEONCopyPLD");
 }
