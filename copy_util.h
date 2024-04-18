@@ -82,12 +82,20 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 // Not working, custom code:
 void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, size_t n)
 {
-    asm( "NEONCopyPLD:\n"
+    /*asm( "NEONCopyPLD:\n"
             "   pld [r1, #0xC0]\n" //预取数据
             "   vldm r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
             "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
             //"   vldm r1!,{d8-d15}\n"
             //"   vstm r0!,{d8-d15}\n"
+            "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
+            "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
+            );*/
+    asm(
+            "NEONCopyPLD:\n"
+            "   pld [r1, #0xC0]\n" //预取数据
+            "   vldm r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
+            "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );
