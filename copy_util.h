@@ -49,13 +49,14 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 
 // From https://stackoverflow.com/questions/34888683/arm-neon-memcpy-optimized-for-uncached-memory
 // and https://stackoverflow.com/questions/61210517/memcpy-for-arm-uncached-memory-for-arm64
-/*void my_copy(volatile void *dst, volatile const void *src, int sz){
+void my_copy(volatile void *dst, volatile const void *src, int sz){
     if (sz & 63) {
         sz = (sz & -64) + 64;
     }
     asm volatile ("NEONCopyPLD: \n"
                   "sub %[dst], %[dst], #64 \n"
                   "1: \n"
+                   "pld [r1, #0xC0]\n" //预取数据
                   "ldnp q0, q1, [%[src]] \n"
                   "ldnp q2, q3, [%[src], #32] \n"
                   "add %[dst], %[dst], #64 \n"
@@ -65,19 +66,19 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
                   "stnp q2, q3, [%[dst], #32] \n"
                   "b.gt 1b \n"
             : [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz) : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
-}*/
+}
 // https://wx.comake.online/doc/doc/SigmaStarDocs-SSC9341_Ispahan-ULS00V040-20210913/customer/faq/i6b0/system/i6b0/neon.html
-void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
+/*void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
 {
     asm(
             "NEONCopyPLD:\n"
             "   pld [r1, #0xC0]\n" //预取数据
-            "   ldnp r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
-            "   stnp r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
+            "   vldm r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
+            "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );
-}
+}*/
 
 
 #ifdef __ARM__
@@ -108,8 +109,8 @@ void* memcpy_data_function(void* args_uncast){
     struct memcpy_args_t* args=(struct memcpy_args_t*)args_uncast;
 #ifdef __ARM__
     //mempcpy(args->dst,args->src,args->len);
-    //my_copy(args->dst,args->src,args->len);
-    memcpy_neon_pld(args->dst,args->src,args->len);
+    my_copy(args->dst,args->src,args->len);
+    //memcpy_neon_pld(args->dst,args->src,args->len);
 #else
     memcpy(args->dst,args->src,args->len);
 #endif
