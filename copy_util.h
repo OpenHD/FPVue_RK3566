@@ -67,7 +67,8 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
             : [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz) : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
 }*/
 // https://wx.comake.online/doc/doc/SigmaStarDocs-SSC9341_Ispahan-ULS00V040-20210913/customer/faq/i6b0/system/i6b0/neon.html
-/*void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
+// https://community.nxp.com/t5/i-MX-Processors/iMX6-EIM-transfer-speed-with-using-NEON-vld-vst-instructions/m-p/312256
+void __attribute__ ((noinline)) memcpy_neon_pld(void *dest, const void *src, size_t n)
 {
     asm(
             "NEONCopyPLD:\n"
@@ -76,28 +77,6 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
             "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
-            );
-}*/
-// https://community.nxp.com/t5/i-MX-Processors/iMX6-EIM-transfer-speed-with-using-NEON-vld-vst-instructions/m-p/312256
-// Not working, custom code:
-void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, size_t n)
-{
-    /*asm( "NEONCopyPLD:\n"
-            "   pld [r1, #0xC0]\n" //预取数据
-            "   vldm r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
-            "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
-            //"   vldm r1!,{d8-d15}\n"
-            //"   vstm r0!,{d8-d15}\n"
-            "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
-            "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
-            );*/
-    asm volatile (
-            "NEONCopyPLD:\n"
-            " pld [r1, #0xC0]\n" // Prefetch data
-            "vldm r1!,{d0-d7}\n" // Load 8 * 8 = 64 single-channel 8-bit data from parameter one r0 ( src )
-            "vstm r0!,{d0-d7}\n" // Stored in the destination address r1 ( dst ) , it is also 64 8-bit single-channel 8-bit data
-            " subs r2,r2,#0x40\n" // Loop jump parameters , subtract 64 each time , total number of loops = row * col * 4 / 64
-            "bgt NEONCopyPLD\n" // This used to be bge , there was a problem . Now change it to bgt .
             );
 }
 
@@ -131,8 +110,7 @@ void* memcpy_data_function(void* args_uncast){
 #ifdef __ARM__
     //mempcpy(args->dst,args->src,args->len);
     //my_copy(args->dst,args->src,args->len);
-    //memcpy_neon_pld(args->dst,args->src,args->len);
-    memcpy_neon_pld2(args->dst,args->src,args->len);
+    memcpy_neon_pld(args->dst,args->src,args->len);
 #else
     memcpy(args->dst,args->src,args->len);
 #endif
