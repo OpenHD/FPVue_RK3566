@@ -911,6 +911,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
             SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
             first= false;
         }
+        check_for_x20(frame->data(),frame->size());
 
         feed_packet_to_decoder(packet,frame->data(),frame->size());
     };
