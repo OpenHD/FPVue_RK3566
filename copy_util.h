@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <string.h>
 
-#define __ARM__
+//#define __ARM__
 /*#include <arm_neon.h>
 
 void memcpy_neon_8bytes(uint8_t* region2, const uint8_t* region1, size_t length){
@@ -49,6 +49,7 @@ void memcpy_neon_aligned(void* dst, const void * src, size_t length){
 
 // From https://stackoverflow.com/questions/34888683/arm-neon-memcpy-optimized-for-uncached-memory
 // and https://stackoverflow.com/questions/61210517/memcpy-for-arm-uncached-memory-for-arm64
+#ifdef __ARM__
 void my_copy(volatile void *dst, volatile const void *src, int sz){
     if (sz & 63) {
         sz = (sz & -64) + 64;
@@ -79,6 +80,7 @@ void my_copy(volatile void *dst, volatile const void *src, int sz){
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );
 }*/
+#endif
 
 
 #ifdef __ARM__
