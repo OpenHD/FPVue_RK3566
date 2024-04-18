@@ -91,7 +91,7 @@ void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, si
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );*/
-    asm (
+    asm volatile (
             "NEONCopyPLD:\n"
             " pld [r1, #0xC0]\n" // Prefetch data
             "vldm r1!,{d0-d7}\n" // Load 8 * 8 = 64 single-channel 8-bit data from parameter one r0 ( src )
