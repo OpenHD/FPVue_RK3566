@@ -91,13 +91,13 @@ void __attribute__ ((noinline)) memcpy_neon_pld2(void *dest, const void *src, si
             "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
             "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
             );*/
-    asm(
+    asm (
             "NEONCopyPLD:\n"
-            "   pld [r1, #0xC0]\n" //预取数据
-            "   vldm r1!,{d0-d7}\n" //从参数一r0（src）加载8*8=64个单通道8位数据
-            "   vstm r0!,{d0-d7}\n" //存储在目的地址r1（dst）中，同样是64个8位单通道8位数据
-            "   subs r2,r2,#0x40\n" //循环跳转参数，每次减64，总共循环次数=row*col*4/64
-            "   bgt NEONCopyPLD\n"  //以前这里是bge，有问题。现在改成bgt。
+            " pld [r1, #0xC0]\n" // Prefetch data
+            "vldm r1!,{d0-d7}\n" // Load 8 * 8 = 64 single-channel 8-bit data from parameter one r0 ( src )
+            "vstm r0!,{d0-d7}\n" // Stored in the destination address r1 ( dst ) , it is also 64 8-bit single-channel 8-bit data
+            " subs r2,r2,#0x40\n" // Loop jump parameters , subtract 64 each time , total number of loops = row * col * 4 / 64
+            "bgt NEONCopyPLD\n" // This used to be bge , there was a problem . Now change it to bgt .
             );
 }
 
