@@ -21,7 +21,7 @@ ls
 cmake -B build -DCMAKE_INSTALL_PREFIX="/opt/fpv/usr/local"
 sudo cmake --build build --target install
 echo $PWD
-#cp other/Header.h264 /opt/fpv/usr/local/bin/
+cp other/x20_header.h264 /opt/fpv/usr/local/bin/
 
 VERSION="1.2-$(date -d '+1 hour' +'%m-%d-%Y--%H-%M-%S')"
 VERSION=$(echo "$VERSION" | sed 's/\//-/g')
