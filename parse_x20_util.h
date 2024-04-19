@@ -26,7 +26,7 @@ static int check_for_x20(const uint8_t* data, int data_len){
         //printf("Got SPS\n");
         printf("[\n");
         for(int i=0;i<data_len;i++){
-            printf("%d,",(int)data[data_len]);
+            printf("%d,",(int)data[i]);
         }
         printf("]\n");
     }
