@@ -49,6 +49,7 @@ extern "C" {
 #ifdef __cplusplus
 #include "gstrtpreceiver.h"
 #include "SchedulingHelper.hpp"
+#include "parse_x20_util.h"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -96,7 +97,8 @@ int video_zpos = 1;
 int develop_rendering_mode=0;
 bool decode_h265=false;
 int gst_udp_port=-1;
-bool x20_apply_fixes=false;
+bool x20_force=false;
+bool x20_auto=false;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -153,7 +155,7 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     uint64_t before_memcpy=get_time_ms();
     //memcpy_threaded(test_buffer,src_p,memory_size,3);
     //memcpy_threaded(dst_p,test_buffer,memory_size,3);
-    memcpy_threaded(dst_p,src_p,memory_size,3);
+    memcpy_threaded(dst_p,src_p,memory_size,2);
 
     end_sync(fd_src,false);
     end_sync(fd_dst,true);
@@ -879,7 +881,6 @@ bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
             decoder_stalled_count++;
             printf("Cannot feed decoder, stalled %d ?\n",decoder_stalled_count);
             return false;
-            break;
         }
         usleep(2 * 1000);
     }
@@ -887,7 +888,8 @@ bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
 }
 
 void configure_x20(MppPacket *packet){
-    FILE *fp = fopen("/usr/local/bin/Header.h264", "rb");
+    printf("Applying x20 hack\n");
+    FILE *fp = fopen("/usr/local/bin/x20_header.h264", "rb");
     assert(fp);
     fseek(fp, 0L, SEEK_END);
     long size = ftell(fp);
@@ -900,6 +902,8 @@ void configure_x20(MppPacket *packet){
     feed_packet_to_decoder(packet,tmp_data.data(),size);
 }
 
+uint64_t first_frame_ms=0;
+bool air_unit_discovery_finished= false;
 void read_gstreamerpipe_stream(MppPacket *packet){
     assert(gst_udp_port!=-1);
     GstRtpReceiver receiver{gst_udp_port,decode_h265 ? 1 : 0};
@@ -911,10 +915,40 @@ void read_gstreamerpipe_stream(MppPacket *packet){
             SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
             first= false;
         }
+        if(!x20_force && x20_auto){
+            // X20 auto detection
+            if(!air_unit_discovery_finished){
+                const int x20_check=check_for_x20(frame->data(),frame->size());
+                if(x20_check==1){
+                    // We have an x20
+                    configure_x20(packet);
+                    air_unit_discovery_finished= true;
+                }else if(x20_check==2){
+                    // We have no x20 (definitely)
+                    air_unit_discovery_finished= true;
+                }else{
+                    // Unknown if x20 or not
+                    // As a bup, we assume no x20 after X seconds
+                    if(first_frame_ms==0){
+                        first_frame_ms=get_time_ms();
+                        return ;
+                    }else{
+                        const auto elapsed=get_time_ms()-first_frame_ms;
+                        if(elapsed>5*1000){
+                            // Assume no x20
+                            printf("X20 or not unknown for > 5 seconds\n");
+                            air_unit_discovery_finished= true;
+                        }else{
+                            // Skip this frame
+                            return ;
+                        }
+                    }
+                }
+            }
+        }
         feed_packet_to_decoder(packet,frame->data(),frame->size());
     };
-    if(x20_apply_fixes){
-        printf("Applying x20 hack\n");
+    if(x20_force){
         configure_x20(packet);
     }
     receiver.start_receiving(cb);
@@ -1012,7 +1046,10 @@ void printHelp() {
     "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n"
-    "    --x20      - specific x20 fixe(s) \n"
+    "    --x20-force      - forces specific x20 fixe(s) (no autodetect), only works with x20\n"
+    "\n"
+    "    --x20-auto      - auto detect x20 or not as air, works with x20 AND rpi\n"
+    "\n"
     "\n", __DATE__
   );
 }
@@ -1155,13 +1192,24 @@ int main(int argc, char **argv)
         develop_rendering_mode= atoi((char*)mode);
         continue;
     }
-    __OnArgument("--x20") {
+    __OnArgument("--x20-force") {
         const char* mode = __ArgValue;
-        x20_apply_fixes= true;
+        x20_force= true;
+        continue;
+    }
+    __OnArgument("--x20-auto") {
+        const char* mode = __ArgValue;
+        x20_auto= true;
         continue;
     }
 
 	__EndParseConsoleArguments__
+
+    // X20 force and x20 auto are exclusive
+    if(x20_auto && x20_force){
+        printf("Cannot use x20 auto and force at the same time\n");
+        assert(false);
+    }
 
 	if (enable_osd == 0 ) {
 		video_zpos = 4;

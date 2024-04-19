@@ -6,4 +6,4 @@ make
 
 cd ../
 
-./run_help.sh
+./run_help2.sh

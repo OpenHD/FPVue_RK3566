@@ -22,6 +22,7 @@ set(SOURCE_FILES drm.c
         gstrtpreceiver.h
         #
         assembly/memcpymove-v7l.S
+        parse_x20_util.h
 )
 
 include_directories("/usr/include/libdrm" "/usr/include/cairo" )
