@@ -11,10 +11,22 @@
 
 #include "nalu/NALU.hpp"
 
+
+static void print_data(const uint8_t* data,int data_len){
+    printf("[\n");
+    for(int i=0;i<data_len;i++){
+        printf("%d,",(int)data[i]);
+    }
+    printf("]\n");
+}
+
+static uint8_t X20_SPS[]={
+        0,0,0,1,103,77,0,41,150,84,2,128,45,136,
+};
+
 // Return 0: Not yet know
 // Return 1: Definitely x20
 // Return 2: Definitely not x20
-
 
 
 static int check_for_x20(const uint8_t* data, int data_len){
@@ -24,11 +36,13 @@ static int check_for_x20(const uint8_t* data, int data_len){
     printf("Type:%s\n",tmp.get_nal_unit_type_as_string().c_str());
     if(type==NALUnitType::H264::NAL_UNIT_TYPE_SPS){
         //printf("Got SPS\n");
-        printf("[\n");
-        for(int i=0;i<data_len;i++){
-            printf("%d,",(int)data[i]);
+        if(data_len==sizeof(X20_SPS) && memcmp(data,&X20_SPS,data_len)==0){
+            printf("X20 SPS");
         }
-        printf("]\n");
+
+    }else if(type==NALUnitType::H264::NAL_UNIT_TYPE_PPS){
+        printf("Got PPS\n");
+        print_data(data,data_len);
     }
 }
 
