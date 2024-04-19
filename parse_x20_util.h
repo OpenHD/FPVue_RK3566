@@ -46,7 +46,7 @@ static int check_for_x20(const uint8_t* data, int data_len){
             return 2;
         }
     }else if(type==NALUnitType::H264::NAL_UNIT_TYPE_PPS){
-        printf("Got PPS\n");
+        //printf("Got PPS\n");
         //print_data(data,data_len);
         if(data_len==sizeof(X20_PPS) && memcmp(data,&X20_PPS,data_len)==0){
             printf("X20 PPS\n");
