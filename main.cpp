@@ -928,6 +928,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
                     air_unit_discovery_finished= true;
                 }else{
                     // Unknown if x20 or not
+                    // As a bup, we assume no x20 after X seconds
                     if(first_frame_ms==0){
                         first_frame_ms=get_time_ms();
                         return ;
