@@ -33,15 +33,3 @@ API_KEY=$(cat /opt/additionalFiles/cloudsmith_api_key.txt)
 DISTRO=$(cat /opt/additionalFiles/distro.txt)
 FLAVOR=$(cat /opt/additionalFiles/flavor.txt)
 BOARD=$(cat /opt/additionalFiles/board.txt)
-
-if [ "$BOARD" = "rk3588" ]; then
-    for file in *.deb; do
-        mv "$file" "${file%.deb}-rk3588.deb"
-    done
-    cloudsmith push deb --api-key "$API_KEY" openhd/dev-release/${DISTRO}/${FLAVOR} *.deb || exit 1
-else
-for file in *.deb; do
-        mv "$file" "${file%.deb}-rk3566.deb"
-    done
-    cloudsmith push deb --api-key "$API_KEY" openhd/dev-release/${DISTRO}/${FLAVOR} *.deb || exit 1
-fi
