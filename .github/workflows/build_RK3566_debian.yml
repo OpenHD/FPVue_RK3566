@@ -30,14 +30,28 @@ jobs:
           submodules: recursive
       - name: Building mpp in CHROOT
         run: |
-          git clone https://github.com/OpenHD/ChrootCompilationTest /opt/ChrootCompilationTest
-          mkdir -p /opt/ChrootCompilationTest/additionalFiles
-          git clone https://github.com/OpenHD/FPVue_RK3566 -b openhd /opt/ChrootCompilationTest/additionalFiles/ --recursive
-          echo $CLOUDSMITH_API_KEY > /opt/ChrootCompilationTest/additionalFiles/cloudsmith_api_key.txt
-          echo "debian" > /opt/ChrootCompilationTest/additionalFiles/distro.txt
-          echo "bullseye" > /opt/ChrootCompilationTest/additionalFiles/flavor.txt
-          echo "rk3566" /opt/ChrootCompilationTest/additionalFiles/board.txt
-          cd /opt/ChrootCompilationTest/
+          git clone https://github.com/OpenHD/OpenHD-ChrootCompiler /opt/OpenHD-ChrootCompiler
+          mkdir -p /opt/OpenHD-ChrootCompiler/additionalFiles
+          git clone https://github.com/OpenHD/OpenHD -b ${{ github.ref_name }} /opt/OpenHD-ChrootCompiler/additionalFiles/ --recursive
+          echo $CLOUDSMITH_API_KEY > /opt/OpenHD-ChrootCompiler/additionalFiles/cloudsmith_api_key.txt
+          echo "standard" > /opt/OpenHD-ChrootCompiler/additionalFiles/custom.txt
+          echo "arm64" > /opt/OpenHD-ChrootCompiler/additionalFiles/arch.txt
+          echo "debian" > /opt/OpenHD-ChrootCompiler/additionalFiles/distro.txt
+          echo "bullseye" > /opt/OpenHD-ChrootCompiler/additionalFiles/flavor.txt
+          echo "${{ github.ref_name }}" > /opt/OpenHD-ChrootCompiler/additionalFiles/repo.txt
+
+          cd /opt/OpenHD-ChrootCompiler/
           sudo apt update
           sudo bash install_dep.sh
           sudo bash build.sh radxa-zero3w $API_KEY debian bullseye
+ 
+      - name: debug
+        run: |
+          cp -r /opt/OpenHD-ChrootCompiler/out/* .
+
+      - name: Upload to Github
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: "FPVUE-OpenHD"
+          path: |
+            *.deb
