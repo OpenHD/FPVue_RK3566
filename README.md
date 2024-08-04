@@ -1,3 +1,6 @@
+#Modified and improved version of the WFB-NG client 
+
+
 # FPVue_rk
 
 WFB-ng client (Video Decoder) for Rockchip platform powered by the [Rockchip MPP library](https://github.com/rockchip-linux/mpp).
