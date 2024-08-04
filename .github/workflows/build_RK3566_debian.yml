@@ -2,13 +2,6 @@ name: build_package_rock5_debian
 
 on: 
   push:
-    branches: ["openhd"]
-    paths-ignore:
-      - '**.md'
-      - '**.asciidoc'
-      - '**.adoc'
-      - '.gitignore'
-      - 'LICENSE'
 
 jobs:
   build:
