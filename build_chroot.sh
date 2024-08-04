@@ -26,9 +26,8 @@ cp other/x20_header.h264 /opt/fpv/usr/local/bin/
 VERSION="1.2-$(date -d '+1 hour' +'%m-%d-%Y--%H-%M-%S')"
 VERSION=$(echo "$VERSION" | sed 's/\//-/g')
 fpm -a arm64 -s dir -t deb -n fpv-rk3566 -v "$VERSION" -C /opt/fpv -p fpv-rk3566_VERSION_ARCH.deb
-echo "push to cloudsmith"
+cp *.deb /out/
 git describe --exact-match HEAD >/dev/null 2>&1
-echo "Pushing the package to OpenHD 2.3 repository"
 API_KEY=$(cat /opt/additionalFiles/cloudsmith_api_key.txt)
 DISTRO=$(cat /opt/additionalFiles/distro.txt)
 FLAVOR=$(cat /opt/additionalFiles/flavor.txt)
