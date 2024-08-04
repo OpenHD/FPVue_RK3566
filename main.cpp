@@ -573,6 +573,7 @@ void *__DISPLAY_THREAD__(void *param)
 	uint64_t max_latency = 0;
     struct timespec fps_start, fps_end;
 	clock_gettime(CLOCK_MONOTONIC, &fps_start);
+    uint64_t lastTimeDisplayed = 0;
 
 	while (!frm_eos) {
 		int fb_id;
@@ -670,9 +671,15 @@ void *__DISPLAY_THREAD__(void *param)
                     0, 0,
                     ((uint16_t) output_list->video_frm_width) << 16, ((uint16_t) output_list->video_frm_height) << 16
             );
-            uint64_t elapsed_modeset=get_time_ms()-before;
+            uint64_t curtime = get_time_ms();
+            uint64_t elapsed_modeset=curtime-before;
             accumulate_and_print("drmModeSetPlane",elapsed_modeset,&m_drm_mode_set_plane_latency);
             //print_time_ms("drmModeSetPlane took",elapsed_modeset);
+            if (!lastTimeDisplayed)
+            {
+                print_time_ms("time since last frame", curtime - lastTimeDisplayed);
+            }
+            lastTimeDisplayed = curtime;
         }else if(develop_rendering_mode==6){
             // memcpy
             uint64_t before=get_time_ms();
