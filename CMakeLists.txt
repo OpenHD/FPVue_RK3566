@@ -26,7 +26,7 @@ set(SOURCE_FILES drm.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread m cairo ) #-lstringlib
+target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread m ) #-lstringlib
 
 # experiment gstreamer
 find_package(PkgConfig REQUIRED)
@@ -42,6 +42,11 @@ pkg_check_modules(LIBDRM REQUIRED libdrm)
 message(STATUS "LIBDRM_LINK_LIBRARIES=${LIBDRM_LINK_LIBRARIES}")
 include_directories(${LIBDRM_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} ${LIBDRM_LIBRARIES})
+
+pkg_check_modules(CAIRO REQUIRED cairo)
+message(STATUS "CAIRO_LINK_LIBRARIES=${CAIRO_LINK_LIBRARIES}")
+include_directories(${CAIRO_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} ${CAIRO_LIBRARIES})
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
   set(
