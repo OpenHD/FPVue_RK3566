@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/mman.h>
+#include <string>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -46,6 +47,7 @@ extern "C" {
 #include "gstrtpreceiver.h"
 #include "SchedulingHelper.hpp"
 #include "parse_x20_util.h"
+#include "gstallwinnerdisplay.h"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -85,6 +87,9 @@ bool decode_h265=false;
 int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
+bool aw_display=false;
+std::string aw_decoder="gstomxvideodec";
+std::string aw_sink="autovideosink";
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -976,6 +981,12 @@ void printHelp() {
     "\n"
     "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
     "\n"
+    "    --aw-display        - use gstreamer decode and display for Allwinner SoCs\n"
+    "\n"
+    "    --aw-decoder        - gstreamer decoder element (default gstomxvideodec)\n"
+    "\n"
+    "    --aw-sink           - gstreamer video sink element (default autovideosink)\n"
+    "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n"
     "    --x20-force      - forces specific x20 fixe(s) (no autodetect), only works with x20\n"
@@ -1075,6 +1086,18 @@ int main(int argc, char **argv)
         gst_udp_port=atoi(__ArgValue);
         continue;
     }
+    __OnArgument("--aw-display") {
+        aw_display=true;
+        continue;
+    }
+    __OnArgument("--aw-decoder") {
+        aw_decoder=__ArgValue;
+        continue;
+    }
+    __OnArgument("--aw-sink") {
+        aw_sink=__ArgValue;
+        continue;
+    }
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
@@ -1107,7 +1130,20 @@ int main(int argc, char **argv)
         printf("Decoding h264 (default)\n");
     }
     printf("Rendering mode %d\n",develop_rendering_mode);
-	//MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
+    if(aw_display){
+        if(gst_udp_port==-1){
+            printf("--aw-display requires --gst-udp-port\n");
+            return 1;
+        }
+        GstAllwinnerDisplay display(gst_udp_port, decode_h265, aw_decoder, aw_sink);
+        display.start();
+        while(!signal_flag){
+            sleep(1);
+        }
+        display.stop();
+        return 0;
+    }
+        //MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
     //MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
 	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
 	assert(!ret);
