@@ -84,7 +84,7 @@ pthread_cond_t video_cond;
 int video_zpos = 4;
 int develop_rendering_mode=0;
 bool decode_h265=false;
-int gst_udp_port=-1;
+int udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
 bool aw_display=false;
@@ -846,8 +846,8 @@ void configure_x20(MppPacket *packet){
 uint64_t first_frame_ms=0;
 bool air_unit_discovery_finished= false;
 void read_gstreamerpipe_stream(MppPacket *packet){
-    assert(gst_udp_port!=-1);
-    GstRtpReceiver receiver{gst_udp_port,decode_h265 ? 1 : 0};
+    assert(udp_port!=-1);
+    GstRtpReceiver receiver{udp_port,decode_h265 ? 1 : 0};
     auto cb=[&packet,&decoder_stalled_count](std::shared_ptr<std::vector<uint8_t>> frame){
         //printf("Got data \n");
         // Let the gst pull thread run at quite high priority
@@ -977,13 +977,9 @@ void printHelp() {
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
     "\n"
-    "    --gst-udp-port      - use internal gst for decoding, specifies the udp port for rtp in. Otherwise, fd needs to be provided. \n"
+    "    --udp-port          - UDP port for RTP input (used by aw-display)\n"
     "\n"
-    "    --aw-display        - use gstreamer decode and display for Allwinner SoCs\n"
-    "\n"
-    "    --aw-decoder        - gstreamer decoder element (default gstomxvideodec)\n"
-    "\n"
-    "    --aw-sink           - gstreamer video sink element (default autovideosink)\n"
+    "    --aw-display        - use V4L2 stateless decode and sunxi-drm display\n"
     "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n"
@@ -1080,8 +1076,8 @@ int main(int argc, char **argv)
         decode_h265=true;
         continue;
     }
-    __OnArgument("--gst-udp-port") {
-        gst_udp_port=atoi(__ArgValue);
+    __OnArgument("--udp-port") {
+        udp_port=atoi(__ArgValue);
         continue;
     }
     __OnArgument("--aw-display") {
@@ -1121,12 +1117,14 @@ int main(int argc, char **argv)
     }
     printf("Rendering mode %d\n",develop_rendering_mode);
     if(aw_display){
-        if(gst_udp_port==-1){
-            printf("--aw-display requires --gst-udp-port\n");
+        if(udp_port==-1){
+            printf("--aw-display requires --udp-port\n");
             return 1;
         }
-        AllwinnerV4L2Display display(gst_udp_port, decode_h265);
-        display.start();
+        AllwinnerV4L2Display display(udp_port, decode_h265);
+        if(!display.start()){
+            return 1;
+        }
         while(!signal_flag){
             sleep(1);
         }
@@ -1190,7 +1188,7 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////// MAIN LOOP
 	
 	//read_rtp_stream(listen_port, packet, nal_buffer);
-    if(gst_udp_port==-1){
+    if(udp_port==-1){
         read_filesrc_stream((void**)packet);
     }else{
         read_gstreamerpipe_stream((void**)packet);
