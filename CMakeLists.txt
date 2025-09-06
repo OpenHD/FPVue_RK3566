@@ -12,9 +12,7 @@ add_compile_options("-Wno-address-of-packed-member")
 SET(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
 set(SOURCE_FILES drm.c
-				osd.c
-				rtp.c
-				mavlink.c
+                                rtp.c
         main.cpp
         copy_util.h
         SchedulingHelper.hpp
@@ -43,10 +41,6 @@ message(STATUS "LIBDRM_LINK_LIBRARIES=${LIBDRM_LINK_LIBRARIES}")
 include_directories(${LIBDRM_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} ${LIBDRM_LIBRARIES})
 
-pkg_check_modules(CAIRO REQUIRED cairo)
-message(STATUS "CAIRO_LINK_LIBRARIES=${CAIRO_LINK_LIBRARIES}")
-include_directories(${CAIRO_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} ${CAIRO_LIBRARIES})
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
   set(
