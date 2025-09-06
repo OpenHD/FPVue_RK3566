@@ -2,7 +2,7 @@ name: build_package_rock5_debian
 
 on: 
   push:
-    branches: ["openhd"]
+    branches: ["testing"]
     paths-ignore:
       - '**.md'
       - '**.asciidoc'
