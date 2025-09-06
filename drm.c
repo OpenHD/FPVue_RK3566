@@ -13,8 +13,6 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
-#include <cairo.h>
-#include <pthread.h>
 #include <rockchip/rk_mpi.h>
 #include <assert.h>
 
@@ -269,8 +267,7 @@ int modeset_setup_objects(int fd, struct modeset_output *out)
 {
 	struct drm_object *connector = &out->connector;
 	struct drm_object *crtc = &out->crtc;
-	struct drm_object *plane_video = &out->video_plane;
-	//struct drm_object *plane_osd = &out->osd_plane;
+        struct drm_object *plane_video = &out->video_plane;
 
 	modeset_get_object_properties(fd, connector, DRM_MODE_OBJECT_CONNECTOR);
 	if (!connector->props)
@@ -280,12 +277,9 @@ int modeset_setup_objects(int fd, struct modeset_output *out)
 	if (!crtc->props)
 		goto out_crtc;
 
-	modeset_get_object_properties(fd, plane_video, DRM_MODE_OBJECT_PLANE);
-	if (!plane_video->props)
-		goto out_plane;
-	/*modeset_get_object_properties(fd, plane_osd, DRM_MODE_OBJECT_PLANE);
-	if (!plane_osd->props)
-		goto out_plane;*/
+        modeset_get_object_properties(fd, plane_video, DRM_MODE_OBJECT_PLANE);
+        if (!plane_video->props)
+                goto out_plane;
 	return 0;
 
 out_plane:
@@ -299,10 +293,9 @@ out_conn:
 
 void modeset_destroy_objects(int fd, struct modeset_output *out)
 {
-	modeset_drm_object_fini(&out->connector);
-	modeset_drm_object_fini(&out->crtc);
-	modeset_drm_object_fini(&out->video_plane);
-	//modeset_drm_object_fini(&out->osd_plane);
+        modeset_drm_object_fini(&out->connector);
+        modeset_drm_object_fini(&out->crtc);
+        modeset_drm_object_fini(&out->video_plane);
 }
 
 
@@ -389,30 +382,17 @@ void modeset_destroy_fb(int fd, struct modeset_buf *buf)
 
 int modeset_setup_framebuffers(int fd, drmModeConnector *conn, struct modeset_output *out)
 {
-    // OSD disable
-	/*for (int i=0; i<OSD_BUF_COUNT; i++) {
-		out->osd_bufs[i].width = out->mode.hdisplay;
-		out->osd_bufs[i].height = out->mode.vdisplay;
-		int ret = modeset_create_fb(fd, &out->osd_bufs[i]);
-		if (ret) {
-			return ret;
-		}
-	}*/
-	out->video_crtc_width = out->mode.hdisplay;
-	out->video_crtc_height = out->mode.vdisplay;
-	return 0;
+        out->video_crtc_width = out->mode.hdisplay;
+        out->video_crtc_height = out->mode.vdisplay;
+        return 0;
 }
 
 
 void modeset_output_destroy(int fd, struct modeset_output *out)
 {
 	modeset_destroy_objects(fd, out);
-    // OSD disable
-	/*for (int i=0; i<OSD_BUF_COUNT; i++) {
-		modeset_destroy_fb(fd, &out->osd_bufs[i]);
-	}*/
-	drmModeDestroyPropertyBlob(fd, out->mode_blob_id);
-	free(out);
+        drmModeDestroyPropertyBlob(fd, out->mode_blob_id);
+        free(out);
 }
 
 struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeConnector *conn, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh)
@@ -474,18 +454,11 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 	}
 	fprintf(stdout, "Using plane %d (NV12) for Video\n",  out->video_plane.id);
 
-	/*ret = modeset_find_plane(fd, out, &out->osd_plane, DRM_FORMAT_ARGB8888);
-	if (ret) {
-		fprintf(stderr, "no valid osd plane with format ARGB8888 for crtc %u\n", out->crtc.id);
-		goto out_blob;
-	}
-	fprintf(stdout, "Using plane %d (ARGB8888) for OSD\n",  out->osd_plane.id);*/
-
-	ret = modeset_setup_objects(fd, out);
-	if (ret) {
-		fprintf(stderr, "cannot get plane properties\n");
-		goto out_blob;
-	}
+        ret = modeset_setup_objects(fd, out);
+        if (ret) {
+                fprintf(stderr, "cannot get plane properties\n");
+                goto out_blob;
+        }
 
 	ret = modeset_setup_framebuffers(fd, conn, out);
 	if (ret) {
@@ -494,10 +467,8 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 		goto out_obj;
 	}
 
-	out->video_request = drmModeAtomicAlloc();
-	assert(out->video_request);
-	out->osd_request = drmModeAtomicAlloc();
-	assert(out->video_request);
+        out->video_request = drmModeAtomicAlloc();
+        assert(out->video_request);
 
 	return out;
 
@@ -620,33 +591,6 @@ int modeset_atomic_prepare_commit(int fd, struct modeset_output *out, drmModeAto
 	return 0;
 }
 
-void restore_planes_zpos(int fd, struct modeset_output *output_list) {
-	// restore osd zpos
-    // OSD Disable
-	/*int ret, flags;
-	struct modeset_buf *buf = &output_list->osd_bufs[0];
-
-	// TODO(geehe) Find a more elegant way to do this.
-	int64_t zpos = get_property_value(fd, output_list->osd_plane.props, "zpos");
-	ret = modeset_atomic_prepare_commit(fd, output_list, output_list->osd_request, &output_list->osd_plane, buf->fb, buf->width, buf->height, zpos);
-	if (ret < 0) {
-		fprintf(stderr, "prepare atomic commit failed for plane %d, %m\n", output_list->osd_plane.id);
-		return;
-	}
-	ret = drmModeAtomicCommit(fd, output_list->osd_request, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-	if (ret < 0) 
-		fprintf(stderr, "modeset atomic commit failed for plane %d, %m\n", output_list->osd_plane.id);
-
-	zpos = get_property_value(fd, output_list->video_plane.props, "zpos");
-	ret = modeset_atomic_prepare_commit(fd, output_list, output_list->video_request, &output_list->video_plane, buf->fb, buf->width, buf->height, zpos);
-	if (ret < 0) {
-		fprintf(stderr, "prepare atomic commit failed for plane %d, %m\n", output_list->video_plane.id);
-		return;
-	}
-	ret = drmModeAtomicCommit(fd, output_list->video_request, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-	if (ret < 0) 
-		fprintf(stderr, "modeset atomic commit failed for plane %d, %m\n", output_list->video_plane.id);*/
-}
 
 void modeset_cleanup(int fd, struct modeset_output *output_list)
 {

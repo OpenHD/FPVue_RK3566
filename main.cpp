@@ -36,11 +36,7 @@ extern "C" {
 #endif
 #include "main.h"
 #include "drm.h"
-#include "osd.h"
 #include "rtp.h"
-
-#include "mavlink/common/mavlink.h"
-#include "mavlink.h"
 #include "time_util.h"
 #include "copy_util.h"
 #ifdef __cplusplus
@@ -83,17 +79,7 @@ int drm_fd = 0;
 pthread_mutex_t video_mutex;
 pthread_cond_t video_cond;
 
-// OSD Vars
-struct video_stats {
-	int current_framerate;
-	uint64_t current_latency;
-	uint64_t max_latency;
-	uint64_t min_latency;
-};
-struct video_stats osd_stats;
-int bw_curr = 0;
-long long bw_stats[10];
-int video_zpos = 1;
+int video_zpos = 4;
 int develop_rendering_mode=0;
 bool decode_h265=false;
 int gst_udp_port=-1;
@@ -190,8 +176,6 @@ void initialize_output_buffers(MppFrame  frame){
     output_list->video_fb_width = output_list->mode.hdisplay;
     output_list->video_fb_height =output_list->mode.vdisplay;
 
-    osd_vars.video_width = output_list->video_frm_width;
-    osd_vars.video_height = output_list->video_frm_height;
 
     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
     assert(!mpi.frm_grp);
@@ -286,8 +270,6 @@ void initialize_output_buffers_ion(MppFrame  frame){
     output_list->video_fb_width = output_list->mode.hdisplay;
     output_list->video_fb_height =output_list->mode.vdisplay;
 
-    osd_vars.video_width = output_list->video_frm_width;
-    osd_vars.video_height = output_list->video_frm_height;
     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
     assert(!mpi.frm_grp);
     ret = mpp_buffer_group_get_external(&mpi.frm_grp,  MPP_BUFFER_TYPE_ION);
@@ -396,8 +378,6 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
     output_list->video_fb_width = output_list->mode.hdisplay;
     output_list->video_fb_height =output_list->mode.vdisplay;
 
-    osd_vars.video_width = output_list->video_frm_width;
-    osd_vars.video_height = output_list->video_frm_height;
 
     // create new external frame group and allocate (commit flow) new DRM buffers and DRM FB
     assert(!mpi.frm_grp);
@@ -567,12 +547,8 @@ void *__DISPLAY_THREAD__(void *param)
     // doesn't hog the CPU
     SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
 	int ret;	
-	int frame_counter = 0;
-	uint64_t latency_avg[200];
-	uint64_t min_latency = 1844674407370955161; // almost MAX_uint64_t
-	uint64_t max_latency = 0;
     struct timespec fps_start, fps_end;
-	clock_gettime(CLOCK_MONOTONIC, &fps_start);
+        clock_gettime(CLOCK_MONOTONIC, &fps_start);
 
 	while (!frm_eos) {
 		int fb_id;
@@ -607,11 +583,6 @@ void *__DISPLAY_THREAD__(void *param)
             ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
             assert(ret>0);
 
-            //ret = pthread_mutex_lock(&osd_mutex);
-            //assert(!ret);
-            //ret = set_drm_object_property(output_list->video_request, &output_list->osd_plane, "FB_ID", output_list->osd_bufs[output_list->osd_buf_switch].fb);
-            //assert(ret>0);
-            //  DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_ASYNC
             drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK |  DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
         }else if(develop_rendering_mode==1){
             static bool logged_once=false;
@@ -697,46 +668,15 @@ void *__DISPLAY_THREAD__(void *param)
         else{
             printf("Unknown rendering mdoe\n");
         }
-		//ret = pthread_mutex_unlock(&osd_mutex);
 
         uint64_t decode_and_handover_display_ms=get_time_ms()-decoding_pts;
         accumulate_and_print("D&Display",decode_and_handover_display_ms,&m_decode_and_handover_display_latency);
         
 		//assert(!ret);
-		frame_counter++;
+                // latency statistics removed
 
-		clock_gettime(CLOCK_MONOTONIC, &fps_end);
-		uint64_t time_us=(fps_end.tv_sec - fps_start.tv_sec)*1000000ll + ((fps_end.tv_nsec - fps_start.tv_nsec)/1000ll) % 1000000ll;
-		if (time_us >= osd_vars.refresh_frequency_ms*1000) {
-			uint64_t sum = 0;
-			for (int i = 0; i < frame_counter; ++i) {
-				sum += latency_avg[i];
-				if (latency_avg[i] > max_latency) {
-					max_latency = latency_avg[i];
-				}
-				if (latency_avg[i] < min_latency) {
-					min_latency = latency_avg[i];
-				}
-			}
-			osd_vars.latency_avg = sum / (frame_counter);
-			osd_vars.latency_max = max_latency;
-			osd_vars.latency_min = min_latency;
-			osd_vars.current_framerate = frame_counter*(1000/osd_vars.refresh_frequency_ms);
-
-			// printf("decoding decoding latency=%.2f ms (%.2f, %.2f), framerate=%d fps\n", osd_vars.latency_avg/1000.0, osd_vars.latency_max/1000.0, osd_vars.latency_min/1000.0, osd_vars.current_framerate);
-			
-			fps_start = fps_end;
-			frame_counter = 0;
-			max_latency = 0;
-			min_latency = 1844674407370955161;
-		}
-        // NOTE: BUG video_poc out of bounds
-		//struct timespec rtime = frame_stats[output_list->video_poc];
-		//latency_avg[frame_counter] = (fps_end.tv_sec - rtime.tv_sec)*1000000ll + ((fps_end.tv_nsec - rtime.tv_nsec)/1000ll) % 1000000ll;
-		//printf("decoding current_latency=%.2f ms\n",  latency_avg[frame_counter]/1000.0);
-		
-	}
-end:	
+        }
+end:
 	printf("Display thread done.\n");
 }
 
@@ -748,8 +688,7 @@ void sig_handler(int signum)
 {
 	printf("Received signal %d\n", signum);
 	signal_flag++;
-	mavlink_thread_signal++;
-	osd_thread_signal++;
+    // auxiliary thread removed
 }
 
 int mpp_split_mode = 0;
@@ -800,8 +739,7 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 		}
 		if (time_us >= 1000000) {
 			bw_start = bw_end;
-			osd_vars.bw_curr = (osd_vars.bw_curr + 1) % 10;
-			osd_vars.bw_stats[osd_vars.bw_curr] = bytesReceived;
+                    // bandwidth stats removed
 			bytesReceived = 0;
 		}
 		if (rx <= 0) {
@@ -1028,13 +966,7 @@ void printHelp() {
     "  Arguments:\n"
     "    -p [Port]         	- Listen port                           (Default: 5600)\n"
     "\n"
-    "    --osd          	- Enable OSD\n"
-    "\n"
-    "    --osd-elements 	- Customize osd elements   			    (Default: video,wfbng)\n"
-    "\n"
-    "    --osd-refresh  	- Defines the delay between osd refresh (Default: 1000 ms)\n"
-    "\n"
-    "    --dvr             	- Save the video feed (no osd) to the provided filename\n"
+    "    --dvr             	- Save the video feed to the provided filename\n"
     "\n"
     "    --mpp-split-mode  	- Enable rockchip MPP_DEC_SET_PARSER_SPLIT_MODE, required when the video stream uses slices\n"
     "\n"
@@ -1104,13 +1036,10 @@ int main(int argc, char **argv)
 {
 	int ret;	
 	int i, j;
-	int enable_osd = 0;
-	int enable_mavlink = 0;
-	uint16_t listen_port = 5600;
-	uint16_t mavlink_port = 14550;
-	uint16_t mode_width = 0;
-	uint16_t mode_height = 0;
-	uint32_t mode_vrefresh = 0;
+        uint16_t listen_port = 5600;
+        uint16_t mode_width = 0;
+        uint16_t mode_height = 0;
+        uint32_t mode_vrefresh = 0;
 	// Load console arguments
 	__BeginParseConsoleArguments__(printHelp) 
 	
@@ -1119,57 +1048,16 @@ int main(int argc, char **argv)
 		continue;
 	}
 
-	__OnArgument("--mavlink-port") {
-		mavlink_port = atoi(__ArgValue);
-		continue;
-	}
+        __OnArgument("--dvr") {
+                enable_dvr = 1;
+                dvr_file = __ArgValue;
+                continue;
+        }
 
-	__OnArgument("--dvr") {
-		enable_dvr = 1;
-		dvr_file = __ArgValue;
-		continue;
-	}
-
-	__OnArgument("--osd") {
-		enable_osd = 1;
-		osd_vars.plane_zpos = 2;
-		osd_vars.enable_latency = mpp_split_mode == 1 ? 0 : 1;
-		if (osd_vars.refresh_frequency_ms == 0 ){
-			osd_vars.refresh_frequency_ms = 1000;
-		} 
-		osd_vars.enable_video = 1;
-		osd_vars.enable_wfbng = 1;
-		enable_mavlink = 1;
-		continue;
-	}
-
-	__OnArgument("--osd-refresh") {
-		osd_vars.refresh_frequency_ms = atoi(__ArgValue);
-		continue;
-	}
-
-	__OnArgument("--osd-elements") {
-		osd_vars.enable_video = 0;
-		osd_vars.enable_wfbng = 0;
-		const char* elements = __ArgValue;
-		const char* element = strtok((char*)elements, ",");
-		while( element != NULL ) {
-			if (!strcmp(element, "video")) {
-				osd_vars.enable_video = 1;
-			} else if (!strcmp(element, "wfbng")) {
-				osd_vars.enable_wfbng = 1;
-				enable_mavlink = 1;
-			}
-			element = strtok(NULL, ",");
-		}
-		continue;
-	}
-
-	__OnArgument("--mpp-split-mode") {
-		mpp_split_mode = 1;
-		osd_vars.enable_latency = 0;
-		continue;
-	}
+        __OnArgument("--mpp-split-mode") {
+                mpp_split_mode = 1;
+                continue;
+        }
 	
 	__OnArgument("--screen-mode") {
 		const char* mode = __ArgValue;
@@ -1210,11 +1098,6 @@ int main(int argc, char **argv)
         printf("Cannot use x20 auto and force at the same time\n");
         assert(false);
     }
-
-	if (enable_osd == 0 ) {
-		video_zpos = 4;
-	}
-
     // H264 or H265
     MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
     if(decode_h265){
@@ -1271,22 +1154,12 @@ int main(int argc, char **argv)
 	ret = pthread_cond_init(&video_cond, NULL);
 	assert(!ret);
 
-	pthread_t tid_frame, tid_display, tid_osd, tid_mavlink;
+        pthread_t tid_frame, tid_display;
 	ret = pthread_create(&tid_frame, NULL, __FRAME_THREAD__, NULL);
 	assert(!ret);
 	ret = pthread_create(&tid_display, NULL, __DISPLAY_THREAD__, NULL);
 	assert(!ret);
-	if (enable_osd) {
-		if (enable_mavlink) {
-			ret = pthread_create(&tid_mavlink, NULL, __MAVLINK_THREAD__, &signal_flag);
-			assert(!ret);
-		}
-		osd_thread_params *args = (osd_thread_params *)malloc(sizeof *args);
-        args->fd = drm_fd;
-        args->out = output_list;
-		ret = pthread_create(&tid_osd, NULL, __OSD_THREAD__, args);
-		assert(!ret);
-	}
+        // auxiliary threads removed
 
 	////////////////////////////////////////////// MAIN LOOP
 	
@@ -1317,14 +1190,7 @@ int main(int argc, char **argv)
 	ret = pthread_mutex_destroy(&video_mutex);
 	assert(!ret);
 
-	if (enable_mavlink) {
-		ret = pthread_join(tid_mavlink, NULL);
-		assert(!ret);
-	}
-	if (enable_osd) {
-		ret = pthread_join(tid_osd, NULL);
-		assert(!ret);
-	}
+        // auxiliary threads removed
 
 	ret = mpi.mpi->reset(mpi.ctx);
 	assert(!ret);
@@ -1351,18 +1217,16 @@ int main(int argc, char **argv)
 	free(nal_buffer);
 	
 	////////////////////////////////////////////// DRM CLEANUP
-	restore_planes_zpos(drm_fd, output_list);
-	drmModeSetCrtc(drm_fd,
-			       output_list->saved_crtc->crtc_id,
-			       output_list->saved_crtc->buffer_id,
-			       output_list->saved_crtc->x,
-			       output_list->saved_crtc->y,
-			       &output_list->connector.id,
-			       1,
-			       &output_list->saved_crtc->mode);
+        drmModeSetCrtc(drm_fd,
+                               output_list->saved_crtc->crtc_id,
+                               output_list->saved_crtc->buffer_id,
+                               output_list->saved_crtc->x,
+                               output_list->saved_crtc->y,
+                               &output_list->connector.id,
+                               1,
+                               &output_list->saved_crtc->mode);
 	drmModeFreeCrtc(output_list->saved_crtc);
-	drmModeAtomicFree(output_list->video_request);
-	drmModeAtomicFree(output_list->osd_request);
+         drmModeAtomicFree(output_list->video_request);
 	modeset_cleanup(drm_fd, output_list);
 	close(drm_fd);
 

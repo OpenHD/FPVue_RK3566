@@ -1,7 +1,5 @@
 /*
- * drm.h offers a list of methods to use linux DRM and perform modeset to display video frames and the OSD. 
- * It uses two different planes for the OSD and the video feed.
- * The OSD is drawn using lib cairo.
+ * drm.h offers a list of methods to use linux DRM and perform modeset to display video frames.
  */
 
 #ifndef DRM_H
@@ -21,11 +19,9 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
-#include <pthread.h>
 #include <rockchip/rk_mpi.h>
 #include <assert.h>
 
-#define OSD_BUF_COUNT	2
 
 struct drm_object {
 	drmModeObjectProperties *props;
@@ -54,15 +50,9 @@ struct modeset_output {
 	int video_crtc_width;
 	int video_crtc_height;
 
-	// OSD variables
-	drmModeAtomicReq *osd_request;
-	unsigned int osd_buf_switch;
-	struct modeset_buf osd_bufs[OSD_BUF_COUNT];
-	struct drm_object osd_plane;
-
-	// Video variables
-	drmModeAtomicReq *video_request;
-	struct drm_object video_plane;
+        // Video variables
+        drmModeAtomicReq *video_request;
+        struct drm_object video_plane;
 	RK_U32 video_frm_width;
 	RK_U32 video_frm_height;
 	int video_fb_x, video_fb_y, video_fb_width, video_fb_height;
@@ -113,8 +103,6 @@ int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_wi
 int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq * req, struct drm_object *plane, int fb_id, int width, int height, int zpos);
 
 int modeset_atomic_prepare_commit(int fd, struct modeset_output *out, drmModeAtomicReq *req, struct drm_object *plane, int fb_id, int width, int height, int zpos);
-
-void restore_planes_zpos(int fd, struct modeset_output *output_list);
 
 void modeset_cleanup(int fd, struct modeset_output *output_list);
 
