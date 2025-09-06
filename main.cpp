@@ -47,7 +47,7 @@ extern "C" {
 #include "gstrtpreceiver.h"
 #include "SchedulingHelper.hpp"
 #include "parse_x20_util.h"
-#include "gstallwinnerdisplay.h"
+#include "allwinnerv4l2display.h"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -88,8 +88,6 @@ int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
 bool aw_display=false;
-std::string aw_decoder="gstomxvideodec";
-std::string aw_sink="autovideosink";
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -1090,14 +1088,6 @@ int main(int argc, char **argv)
         aw_display=true;
         continue;
     }
-    __OnArgument("--aw-decoder") {
-        aw_decoder=__ArgValue;
-        continue;
-    }
-    __OnArgument("--aw-sink") {
-        aw_sink=__ArgValue;
-        continue;
-    }
     __OnArgument("--rmode") {
         const char* mode = __ArgValue;
         develop_rendering_mode= atoi((char*)mode);
@@ -1135,7 +1125,7 @@ int main(int argc, char **argv)
             printf("--aw-display requires --gst-udp-port\n");
             return 1;
         }
-        GstAllwinnerDisplay display(gst_udp_port, decode_h265, aw_decoder, aw_sink);
+        AllwinnerV4L2Display display(gst_udp_port, decode_h265);
         display.start();
         while(!signal_flag){
             sleep(1);
