@@ -18,6 +18,8 @@ set(SOURCE_FILES drm.c
         SchedulingHelper.hpp
         gstrtpreceiver.cpp
         gstrtpreceiver.h
+        allwinnerv4l2display.cpp
+        allwinnerv4l2display.h
         #
         assembly/memcpymove-v7l.S
         parse_x20_util.h
