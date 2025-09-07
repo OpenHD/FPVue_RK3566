@@ -62,7 +62,14 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug")
     CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} -Werror -fsanitize=undefined -fsanitize=address"
   )
+  set(
+    CMAKE_CXX_FLAGS
+    "${CMAKE_CXX_FLAGS} -fsanitize=undefined -fsanitize=address"
+  )
   target_link_options(${PROJECT_NAME}
+    BEFORE PUBLIC -fsanitize=undefined PUBLIC -fsanitize=address
+  )
+  target_link_options(display_host
     BEFORE PUBLIC -fsanitize=undefined PUBLIC -fsanitize=address
   )
 endif()
