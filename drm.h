@@ -19,8 +19,13 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
-#include <rockchip/rk_mpi.h>
 #include <assert.h>
+
+#if __has_include(<rockchip/rk_mpi.h>)
+#include <rockchip/rk_mpi.h>
+#else
+typedef uint32_t RK_U32;
+#endif
 
 
 struct drm_object {
