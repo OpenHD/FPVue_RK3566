@@ -99,10 +99,13 @@ int receive_fd_from_socket(const char *socket_path) {
 int start_display_host(const char *drm_node, const char *socket_path, int clients, uint16_t mode_width, uint16_t mode_height) {
     int fd;
     if (modeset_open(&fd, drm_node) < 0) {
+        fprintf(stderr, "Failed to open DRM node %s\n", drm_node);
         return -1;
     }
+    printf("Opened DRM node %s with fd %d\n", drm_node, fd);
 
     if (mode_width > 0 && mode_height > 0) {
+        printf("Setting mode to %ux%u\n", mode_width, mode_height);
         struct modeset_output *out = (struct modeset_output *)malloc(sizeof(struct modeset_output));
         if (!out) {
             close(fd);
@@ -129,6 +132,7 @@ int start_display_host(const char *drm_node, const char *socket_path, int client
         close(fd);
         return -1;
     }
+    printf("Listening on socket %s for %d clients\n", socket_path, clients);
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
@@ -144,13 +148,18 @@ int start_display_host(const char *drm_node, const char *socket_path, int client
         return -1;
     }
     for (int i = 0; i < clients; ++i) {
+        printf("Waiting for client %d/%d...\n", i + 1, clients);
         int client = accept(server, NULL, NULL);
         if (client >= 0) {
+            printf("Client %d connected, sending DRM FD\n", i + 1);
             send_fd(client, fd);
             close(client);
+        } else {
+            perror("accept");
         }
     }
     close(server);
+    printf("All clients connected. Display host ready\n");
     return fd;
 }
 

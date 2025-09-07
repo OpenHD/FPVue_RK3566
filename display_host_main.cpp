@@ -29,6 +29,12 @@ int main(int argc, char **argv) {
         }
     }
 
+    printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
+    if (width > 0 && height > 0) {
+        printf(", forcing mode %ux%u", width, height);
+    }
+    printf("\n");
+
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {
         fprintf(stderr, "Failed to start display host\n");
