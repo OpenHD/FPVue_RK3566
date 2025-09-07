@@ -58,6 +58,29 @@ Run without any video input and cycle between solid green, red and blue screens:
 fpvue --color-cycle
 ```
 
+### Display host
+
+The `display_host` utility opens the DRM device, shares its file descriptor
+over a UNIX socket and launches `fpvue` in color cycle mode. This is useful for
+testing the display stack or sharing the DRM master with another application.
+
+Run the host:
+
+```
+display_host 720p
+```
+
+To run a Qt5 application against this host, point Qt at the DRM FD socket and
+export the EGLFS platform before launching your app:
+
+```
+export FPVUE_DRM_FD_SOCKET=/tmp/drm-master
+export QT_QPA_PLATFORM=eglfs
+```
+
+The socket path must match the one passed to `display_host` via `--socket`
+ (default: `/tmp/drm-master`).
+
 ### Allwinner A733 experimental mode
 
 The Allwinner path uses the Cedrus V4L2 decoder and presents frames through
