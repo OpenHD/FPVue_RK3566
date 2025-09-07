@@ -28,7 +28,13 @@
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
 #include <linux/videodev2.h>
+
+#if __has_include(<rockchip/rk_mpi.h>)
 #include <rockchip/rk_mpi.h>
+#define HAVE_ROCKCHIP 1
+#else
+#define HAVE_ROCKCHIP 0
+#endif
 
 #include "linux/dma-buf.h"
 
@@ -57,6 +63,7 @@ extern "C" {
 
 #define CODEC_ALIGN(x, a)   (((x)+(a)-1)&~((a)-1))
 
+#if HAVE_ROCKCHIP
 struct {
 	MppCtx		  ctx;
 	MppApi		  *mpi;
@@ -82,12 +89,6 @@ pthread_mutex_t video_mutex;
 pthread_cond_t video_cond;
 
 int video_zpos = 4;
-int develop_rendering_mode=0;
-bool decode_h265=false;
-int udp_port=-1;
-bool x20_force=false;
-bool x20_auto=false;
-bool aw_display=false;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -683,17 +684,6 @@ end:
 	printf("Display thread done.\n");
 }
 
-// signal
-
-int signal_flag = 0;
-
-void sig_handler(int signum)
-{
-	printf("Received signal %d\n", signum);
-	signal_flag++;
-    // auxiliary thread removed
-}
-
 int mpp_split_mode = 0;
 
 int enable_dvr = 0;
@@ -1034,6 +1024,21 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
     int fast_mode = 0;
     set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_FAST_MODE,fast_mode);
 }
+#endif // HAVE_ROCKCHIP
+
+int signal_flag = 0;
+void sig_handler(int signum)
+{
+        printf("Received signal %d\n", signum);
+        signal_flag++;
+}
+
+int develop_rendering_mode=0;
+bool decode_h265=false;
+int udp_port=-1;
+bool x20_force=false;
+bool x20_auto=false;
+bool aw_display=false;
 
 // main
 
@@ -1107,6 +1112,7 @@ int main(int argc, char **argv)
         printf("Cannot use x20 auto and force at the same time\n");
         assert(false);
     }
+#if HAVE_ROCKCHIP
     // H264 or H265
     MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
     if(decode_h265){
@@ -1115,6 +1121,9 @@ int main(int argc, char **argv)
     }else{
         printf("Decoding h264 (default)\n");
     }
+#endif
+    signal(SIGINT, sig_handler);
+    signal(SIGPIPE, sig_handler);
     printf("Rendering mode %d\n",develop_rendering_mode);
     if(aw_display){
         if(udp_port==-1){
@@ -1131,128 +1140,127 @@ int main(int argc, char **argv)
         display.stop();
         return 0;
     }
-        //MppCodingType mpp_type = MPP_VIDEO_CodingHEVC;
-    //MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
-	ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
-	assert(!ret);
 
-	////////////////////////////////// SIGNAL SETUP
+#if HAVE_ROCKCHIP
+    ret = mpp_check_support_format(MPP_CTX_DEC, mpp_type);
+    assert(!ret);
 
-	signal(SIGINT, sig_handler);
-	signal(SIGPIPE, sig_handler);
-	
-	//////////////////////////////////  DRM SETUP
-	ret = modeset_open(&drm_fd, "/dev/dri/card0");
-	if (ret < 0) {
-		printf("modeset_open() =  %d\n", ret);
-	}
-	assert(drm_fd >= 0);
-	output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-	ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh);
-	assert(!ret);
-	
-	////////////////////////////////// MPI SETUP
-	MppPacket packet;
+    //////////////////////////////////  DRM SETUP
+    ret = modeset_open(&drm_fd, "/dev/dri/card0");
+    if (ret < 0) {
+            printf("modeset_open() =  %d\n", ret);
+    }
+    assert(drm_fd >= 0);
+    output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
+    ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh);
+    assert(!ret);
 
-	uint8_t* nal_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
-	assert(nal_buffer);
-	ret = mpp_packet_init(&packet, nal_buffer, READ_BUF_SIZE);
-	assert(!ret);
+    ////////////////////////////////// MPI SETUP
+    MppPacket packet;
 
-	ret = mpp_create(&mpi.ctx, &mpi.mpi);
-	assert(!ret);
+    uint8_t* nal_buffer = (uint8_t*)malloc(READ_BUF_SIZE);
+    assert(nal_buffer);
+    ret = mpp_packet_init(&packet, nal_buffer, READ_BUF_SIZE);
+    assert(!ret);
+
+    ret = mpp_create(&mpi.ctx, &mpi.mpi);
+    assert(!ret);
     set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
-	ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
+    ret = mpp_init(mpi.ctx, MPP_CTX_DEC, mpp_type);
     assert(!ret);
     set_mpp_decoding_parameters(mpi.mpi,mpi.ctx);
 
-	// blocked/wait read of frame in thread
-	int param = MPP_POLL_BLOCK;
-	ret = mpi.mpi->control(mpi.ctx, MPP_SET_OUTPUT_BLOCK, &param);
-	assert(!ret);
+    // blocked/wait read of frame in thread
+    int param = MPP_POLL_BLOCK;
+    ret = mpi.mpi->control(mpi.ctx, MPP_SET_OUTPUT_BLOCK, &param);
+    assert(!ret);
 
- 	//////////////////// THREADS SETUP
-	
-	ret = pthread_mutex_init(&video_mutex, NULL);
-	assert(!ret);
-	ret = pthread_cond_init(&video_cond, NULL);
-	assert(!ret);
+    //////////////////// THREADS SETUP
 
-        pthread_t tid_frame, tid_display;
-	ret = pthread_create(&tid_frame, NULL, __FRAME_THREAD__, NULL);
-	assert(!ret);
-	ret = pthread_create(&tid_display, NULL, __DISPLAY_THREAD__, NULL);
-	assert(!ret);
-        // auxiliary threads removed
+    ret = pthread_mutex_init(&video_mutex, NULL);
+    assert(!ret);
+    ret = pthread_cond_init(&video_cond, NULL);
+    assert(!ret);
 
-	////////////////////////////////////////////// MAIN LOOP
-	
-	//read_rtp_stream(listen_port, packet, nal_buffer);
+    pthread_t tid_frame, tid_display;
+    ret = pthread_create(&tid_frame, NULL, __FRAME_THREAD__, NULL);
+    assert(!ret);
+    ret = pthread_create(&tid_display, NULL, __DISPLAY_THREAD__, NULL);
+    assert(!ret);
+    // auxiliary threads removed
+
+    ////////////////////////////////////////////// MAIN LOOP
+
+    //read_rtp_stream(listen_port, packet, nal_buffer);
     if(udp_port==-1){
         read_filesrc_stream((void**)packet);
     }else{
         read_gstreamerpipe_stream((void**)packet);
     }
 
-	////////////////////////////////////////////// MPI CLEANUP
+    ////////////////////////////////////////////// MPI CLEANUP
 
-	ret = pthread_join(tid_frame, NULL);
-	assert(!ret);
-	
-	ret = pthread_mutex_lock(&video_mutex);
-	assert(!ret);	
-	ret = pthread_cond_signal(&video_cond);
-	assert(!ret);	
-	ret = pthread_mutex_unlock(&video_mutex);
-	assert(!ret);	
+    ret = pthread_join(tid_frame, NULL);
+    assert(!ret);
 
-	ret = pthread_join(tid_display, NULL);
-	assert(!ret);	
-	
-	ret = pthread_cond_destroy(&video_cond);
-	assert(!ret);
-	ret = pthread_mutex_destroy(&video_mutex);
-	assert(!ret);
+    ret = pthread_mutex_lock(&video_mutex);
+    assert(!ret);
+    ret = pthread_cond_signal(&video_cond);
+    assert(!ret);
+    ret = pthread_mutex_unlock(&video_mutex);
+    assert(!ret);
 
-        // auxiliary threads removed
+    ret = pthread_join(tid_display, NULL);
+    assert(!ret);
 
-	ret = mpi.mpi->reset(mpi.ctx);
-	assert(!ret);
+    ret = pthread_cond_destroy(&video_cond);
+    assert(!ret);
+    ret = pthread_mutex_destroy(&video_mutex);
+    assert(!ret);
 
-	if (mpi.frm_grp) {
-		ret = mpp_buffer_group_put(mpi.frm_grp);
-		assert(!ret);
-		mpi.frm_grp = NULL;
-		for (i=0; i<MAX_FRAMES; i++) {
-			ret = drmModeRmFB(drm_fd, mpi.frame_to_drm[i].fb_id);
-			assert(!ret);
-			struct drm_mode_destroy_dumb dmdd;
-			memset(&dmdd, 0, sizeof(dmdd));
-			dmdd.handle = mpi.frame_to_drm[i].handle;
-			do {
-				ret = ioctl(drm_fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dmdd);
-			} while (ret == -1 && (errno == EINTR || errno == EAGAIN));
-			assert(!ret);
-		}
-	}
-		
-	mpp_packet_deinit(&packet);
-	mpp_destroy(mpi.ctx);
-	free(nal_buffer);
-	
-	////////////////////////////////////////////// DRM CLEANUP
-        drmModeSetCrtc(drm_fd,
-                               output_list->saved_crtc->crtc_id,
-                               output_list->saved_crtc->buffer_id,
-                               output_list->saved_crtc->x,
-                               output_list->saved_crtc->y,
-                               &output_list->connector.id,
-                               1,
-                               &output_list->saved_crtc->mode);
-	drmModeFreeCrtc(output_list->saved_crtc);
-         drmModeAtomicFree(output_list->video_request);
-	modeset_cleanup(drm_fd, output_list);
-	close(drm_fd);
+    // auxiliary threads removed
 
-	return 0;
+    ret = mpi.mpi->reset(mpi.ctx);
+    assert(!ret);
+
+    if (mpi.frm_grp) {
+            ret = mpp_buffer_group_put(mpi.frm_grp);
+            assert(!ret);
+            mpi.frm_grp = NULL;
+            for (i=0; i<MAX_FRAMES; i++) {
+                    ret = drmModeRmFB(drm_fd, mpi.frame_to_drm[i].fb_id);
+                    assert(!ret);
+                    struct drm_mode_destroy_dumb dmdd;
+                    memset(&dmdd, 0, sizeof(dmdd));
+                    dmdd.handle = mpi.frame_to_drm[i].handle;
+                    do {
+                            ret = ioctl(drm_fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dmdd);
+                    } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
+                    assert(!ret);
+            }
+    }
+
+    mpp_packet_deinit(&packet);
+    mpp_destroy(mpi.ctx);
+    free(nal_buffer);
+
+    ////////////////////////////////////////////// DRM CLEANUP
+    drmModeSetCrtc(drm_fd,
+                           output_list->saved_crtc->crtc_id,
+                           output_list->saved_crtc->buffer_id,
+                           output_list->saved_crtc->x,
+                           output_list->saved_crtc->y,
+                           &output_list->connector.id,
+                           1,
+                           &output_list->saved_crtc->mode);
+    drmModeFreeCrtc(output_list->saved_crtc);
+     drmModeAtomicFree(output_list->video_request);
+    modeset_cleanup(drm_fd, output_list);
+    close(drm_fd);
+
+    return 0;
+#else
+    fprintf(stderr, "Rockchip support not available in this build\n");
+    return 1;
+#endif
 }

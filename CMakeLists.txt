@@ -26,7 +26,16 @@ set(SOURCE_FILES drm.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} rockchip_mpp pthread m ) #-lstringlib
+
+find_library(ROCKCHIP_MPP_LIB rockchip_mpp)
+if(ROCKCHIP_MPP_LIB)
+  message(STATUS "Building with Rockchip MPP")
+  target_link_libraries(${PROJECT_NAME} ${ROCKCHIP_MPP_LIB})
+else()
+  message(STATUS "Rockchip MPP not found: building without Rockchip support")
+endif()
+
+target_link_libraries(${PROJECT_NAME} pthread m ) #-lstringlib
 
 # experiment gstreamer
 find_package(PkgConfig REQUIRED)
