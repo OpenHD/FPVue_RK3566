@@ -930,6 +930,8 @@ int read_filesrc_stream(MppPacket *packet) {
     return 0;
 }
 
+#endif // HAVE_ROCKCHIP
+
 void printHelp() {
   printf(
     "\n\t\tFPVue FPV Decoder for Rockchip (%s)\n"
@@ -957,6 +959,8 @@ void printHelp() {
     "\n", __DATE__
   );
 }
+
+#if HAVE_ROCKCHIP
 
 void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable){
     RK_U32 res = mpi->control(ctx, control, &enable);
