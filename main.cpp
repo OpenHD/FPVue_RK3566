@@ -684,10 +684,6 @@ end:
 	printf("Display thread done.\n");
 }
 
-int mpp_split_mode = 0;
-
-int enable_dvr = 0;
-const char * dvr_file;
 
 int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	// Create socket
@@ -714,15 +710,8 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 	long long bytesReceived = 0; 
 	uint8_t* nal;
 
-	FILE *out_h265 = NULL;
-	if (enable_dvr) {
-		if ((out_h265 = fopen(dvr_file,"w")) == NULL){
-			printf("ERROR: unable to open %s\n", dvr_file);
-		}
-	}
-
-	struct timespec bw_start, bw_end;
-	clock_gettime(CLOCK_MONOTONIC, &bw_start);
+        struct timespec bw_start, bw_end;
+        clock_gettime(CLOCK_MONOTONIC, &bw_start);
 	while (!signal_flag) {
 		ssize_t rx = recv(socketFd, rx_buffer+8, 4096, 0);
 		clock_gettime(CLOCK_MONOTONIC, &bw_end);
@@ -777,22 +766,14 @@ int read_rtp_stream(int port, MppPacket *packet, uint8_t* nal_buffer) {
 		while (!signal_flag && MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
 				usleep(10000);
 		}
-		poc ++;
-
-		if (out_h265 != NULL) {
-			fwrite(nal, nal_size, 1, out_h265);
-		}
-	};
-	mpp_packet_set_eos(packet);
-	mpp_packet_set_pos(packet, nal_buffer);
+                poc ++;
+        };
+        mpp_packet_set_eos(packet);
+        mpp_packet_set_pos(packet, nal_buffer);
 	mpp_packet_set_length(packet, 0);
-	while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
-		usleep(10000);
-	}
-
-	if (out_h265 != NULL) {
-		fclose(out_h265);
-	}
+        while (MPP_OK != (ret = mpi.mpi->decode_put_packet(mpi.ctx, packet))) {
+                usleep(10000);
+        }
 }
 
 int decoder_stalled_count=0;
@@ -959,10 +940,6 @@ void printHelp() {
     "  Arguments:\n"
     "    -p [Port]         	- Listen port                           (Default: 5600)\n"
     "\n"
-    "    --dvr             	- Save the video feed to the provided filename\n"
-    "\n"
-    "    --mpp-split-mode  	- Enable rockchip MPP_DEC_SET_PARSER_SPLIT_MODE, required when the video stream uses slices\n"
-    "\n"
     "    --screen-mode      - Override default screen mode. ex:1920x1080@120\n"
     "\n"
     "    --h265      - Decode h265. H264 is default. \n"
@@ -1012,7 +989,6 @@ void set_mpp_decoding_parameters(MppApi * mpi,  MppCtx ctx) {
         printf("%p failed to set cfg %p ret %d\n", ctx, cfg, ret);
         assert(false);
     }
-    set_control_verbose(mpi,ctx,MPP_DEC_SET_PARSER_SPLIT_MODE, mpp_split_mode ? 0xffff : 0);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_DISABLE_ERROR, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_IMMEDIATE_OUT, 0xffff);
     set_control_verbose(mpi,ctx,MPP_DEC_SET_ENABLE_FAST_PLAY, 0xffff);
@@ -1057,18 +1033,6 @@ int main(int argc, char **argv)
 		listen_port = atoi(__ArgValue);
 		continue;
 	}
-
-        __OnArgument("--dvr") {
-                enable_dvr = 1;
-                dvr_file = __ArgValue;
-                continue;
-        }
-
-        __OnArgument("--mpp-split-mode") {
-                mpp_split_mode = 1;
-                continue;
-        }
-	
 	__OnArgument("--screen-mode") {
 		const char* mode = __ArgValue;
 		mode_width = atoi(strtok((char*)mode, "x"));
