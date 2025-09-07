@@ -20,6 +20,7 @@ set(SOURCE_FILES drm.c
         gstrtpreceiver.h
         allwinnerv4l2display.cpp
         allwinnerv4l2display.h
+        display_host.cpp
         #
         assembly/memcpymove-v7l.S
         parse_x20_util.h
@@ -51,6 +52,9 @@ pkg_check_modules(LIBDRM REQUIRED libdrm)
 message(STATUS "LIBDRM_LINK_LIBRARIES=${LIBDRM_LINK_LIBRARIES}")
 include_directories(${LIBDRM_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} ${LIBDRM_LIBRARIES})
+
+add_executable(display_host display_host_main.cpp display_host.cpp drm.c)
+target_link_libraries(display_host pthread m ${LIBDRM_LIBRARIES})
 
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")

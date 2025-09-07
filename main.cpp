@@ -54,6 +54,7 @@ extern "C" {
 #include "SchedulingHelper.hpp"
 #include "parse_x20_util.h"
 #include "allwinnerv4l2display.h"
+#include "display_host.h"
 #endif
 
 // This buffer size has no effect on the latency -
@@ -1222,11 +1223,20 @@ int main(int argc, char **argv)
     assert(!ret);
 
     //////////////////////////////////  DRM SETUP
-    ret = modeset_open(&drm_fd, "/dev/dri/card0");
-    if (ret < 0) {
+    const char* fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
+    if (fd_socket) {
+        drm_fd = receive_fd_from_socket(fd_socket);
+        if (drm_fd < 0) {
+            fprintf(stderr, "Failed to receive DRM FD from socket %s\n", fd_socket);
+            return 1;
+        }
+    } else {
+        ret = modeset_open(&drm_fd, "/dev/dri/card0");
+        if (ret < 0) {
             printf("modeset_open() =  %d\n", ret);
+        }
+        assert(drm_fd >= 0);
     }
-    assert(drm_fd >= 0);
     output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
     ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh);
     assert(!ret);
