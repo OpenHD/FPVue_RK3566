@@ -50,6 +50,14 @@ Show command line options:
 fpvue --help
 ```
 
+### Color cycle test mode
+
+Run without any video input and cycle between solid green, red and blue screens:
+
+```
+fpvue --color-cycle
+```
+
 ### Allwinner A733 experimental mode
 
 The Allwinner path uses the Cedrus V4L2 decoder and presents frames through
