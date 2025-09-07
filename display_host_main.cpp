@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 int main(int argc, char **argv) {
     const char *drm_node = "/dev/dri/card0";
@@ -29,11 +31,22 @@ int main(int argc, char **argv) {
         }
     }
 
+    pid_t pid = fork();
+    if (pid == 0) {
+        sleep(1);
+        setenv("FPVUE_DRM_FD_SOCKET", socket_path, 1);
+        execlp("fpvue", "fpvue", "--aw-display", "--udp-port", "5600", NULL);
+        perror("execlp fpvue");
+        return 1;
+    }
+
     printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
     if (width > 0 && height > 0) {
         printf(", forcing mode %ux%u", width, height);
     }
     printf("\n");
+    printf("Launched fpvue Allwinner client as PID %d.\n", pid);
+    printf("To run a Qt application against this host, set FPVUE_DRM_FD_SOCKET=%s and launch your app.\n", socket_path);
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {
