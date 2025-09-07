@@ -75,6 +75,6 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug")
 endif()
 
 include(GNUInstallDirs)
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} display_host
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
