@@ -1053,8 +1053,52 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
             pix[j] = colors[i];
         }
     }
-    ret = modeset_perform_modeset(fd, out, out->video_request, &out->video_plane, bufs[0].fb, bufs[0].width, bufs[0].height, 0);
-    assert(ret >= 0);
+    ret = modeset_perform_modeset(fd, out, out->video_request, &out->video_plane,
+                                  bufs[0].fb, bufs[0].width, bufs[0].height, 0);
+    if (ret < 0 && errno == EACCES) {
+        drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
+        if (plane_res) {
+            for (uint32_t p = 0; p < plane_res->count_planes && ret < 0; ++p) {
+                uint32_t plane_id = plane_res->planes[p];
+                if (plane_id == out->video_plane.id)
+                    continue;
+                drmModePlanePtr plane = drmModeGetPlane(fd, plane_id);
+                if (!plane)
+                    continue;
+                bool usable = false;
+                if (plane->possible_crtcs & (1 << out->crtc_index)) {
+                    for (int j = 0; j < plane->count_formats; j++) {
+                        if (plane->formats[j] == DRM_FORMAT_NV12) {
+                            usable = true;
+                            break;
+                        }
+                    }
+                }
+                drmModeFreePlane(plane);
+                if (!usable)
+                    continue;
+                modeset_drm_object_fini(&out->video_plane);
+                out->video_plane.id = plane_id;
+                modeset_get_object_properties(fd, &out->video_plane, DRM_MODE_OBJECT_PLANE);
+                drmModeAtomicSetCursor(out->video_request, 0);
+                ret = modeset_perform_modeset(fd, out, out->video_request,
+                                              &out->video_plane, bufs[0].fb,
+                                              bufs[0].width, bufs[0].height, 0);
+            }
+            drmModeFreePlaneResources(plane_res);
+        }
+    }
+    if (ret < 0) {
+        fprintf(stderr, "Failed to set mode on any plane: %m\n");
+        for (int i = 0; i < 3; i++) {
+            modeset_destroy_fb(fd, &bufs[i]);
+        }
+        drmModeFreeCrtc(out->saved_crtc);
+        drmModeAtomicFree(out->video_request);
+        modeset_cleanup(fd, out);
+        close(fd);
+        return 1;
+    }
     int idx = 1;
     while (!signal_flag) {
         extra_modeset_set_fb(fd, out, &out->video_plane, bufs[idx].fb);
