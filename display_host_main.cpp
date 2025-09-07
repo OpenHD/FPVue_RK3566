@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     if (pid == 0) {
         sleep(1);
         setenv("FPVUE_DRM_FD_SOCKET", socket_path, 1);
-        execlp("fpvue", "fpvue", "--aw-display", "--udp-port", "5600", NULL);
+        execlp("fpvue", "fpvue", "--color-cycle", NULL);
         perror("execlp fpvue");
         return 1;
     }
@@ -45,8 +45,8 @@ int main(int argc, char **argv) {
         printf(", forcing mode %ux%u", width, height);
     }
     printf("\n");
-    printf("Launched fpvue Allwinner client as PID %d.\n", pid);
-    printf("To run a Qt application against this host, set FPVUE_DRM_FD_SOCKET=%s and launch your app.\n", socket_path);
+    printf("Launched fpvue color cycle client as PID %d.\n", pid);
+    printf("To run a Qt5 application against this host, set FPVUE_DRM_FD_SOCKET=%s and export QT_QPA_PLATFORM=eglfs before launching your Qt app.\n", socket_path);
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {
