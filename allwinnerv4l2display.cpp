@@ -208,8 +208,8 @@ bool AllwinnerV4L2Display::setup_v4l2() {
       close(prime_fd);
       return false;
     }
-    uint32_t pitches[4] = {planes[0].bytesperline, planes[1].bytesperline, 0,
-                           0};
+    uint32_t pitches[4] = {fmt.fmt.pix_mp.plane_fmt[0].bytesperline,
+                           fmt.fmt.pix_mp.plane_fmt[1].bytesperline, 0, 0};
     uint32_t offsets[4] = {planes[0].data_offset, planes[1].data_offset, 0, 0};
     uint32_t fb_id = 0;
     if (drmModeAddFB2(m_drm_fd, kVideoWidth, kVideoHeight, DRM_FORMAT_NV12,
