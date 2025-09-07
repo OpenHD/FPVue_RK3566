@@ -950,6 +950,8 @@ void printHelp() {
     "\n"
     "    --aw-display        - use V4L2 stateless decode and sunxi-drm display\n"
     "\n"
+    "    --color-cycle      - display green, red and blue test screen\n"
+    "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n"
     "    --x20-force      - forces specific x20 fixe(s) (no autodetect), only works with x20\n"
@@ -1019,8 +1021,63 @@ int udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
 bool aw_display=false;
+bool color_cycle=false;
 
 // main
+
+int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh){
+    int ret;
+    int fd;
+    ret = modeset_open(&fd, "/dev/dri/card0");
+    if (ret < 0) {
+        printf("modeset_open() =  %d\n", ret);
+        return 1;
+    }
+    struct modeset_output *out = (struct modeset_output *)malloc(sizeof(struct modeset_output));
+    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh);
+    if (ret) {
+        close(fd);
+        free(out);
+        return 1;
+    }
+    struct modeset_buf bufs[3];
+    uint32_t colors[3] = {0xff00ff00, 0xffff0000, 0xff0000ff};
+    for (int i = 0; i < 3; i++) {
+        bufs[i].width = out->mode.hdisplay;
+        bufs[i].height = out->mode.vdisplay;
+        ret = modeset_create_fb(fd, &bufs[i]);
+        assert(!ret);
+        uint32_t *pix = (uint32_t *)bufs[i].map;
+        size_t pixels = (size_t)(bufs[i].stride / 4) * bufs[i].height;
+        for (size_t j = 0; j < pixels; j++) {
+            pix[j] = colors[i];
+        }
+    }
+    ret = modeset_perform_modeset(fd, out, out->video_request, &out->video_plane, bufs[0].fb, bufs[0].width, bufs[0].height, 0);
+    assert(ret >= 0);
+    int idx = 1;
+    while (!signal_flag) {
+        extra_modeset_set_fb(fd, out, &out->video_plane, bufs[idx].fb);
+        idx = (idx + 1) % 3;
+        sleep(1);
+    }
+    for (int i = 0; i < 3; i++) {
+        modeset_destroy_fb(fd, &bufs[i]);
+    }
+    drmModeSetCrtc(fd,
+                   out->saved_crtc->crtc_id,
+                   out->saved_crtc->buffer_id,
+                   out->saved_crtc->x,
+                   out->saved_crtc->y,
+                   &out->connector.id,
+                   1,
+                   &out->saved_crtc->mode);
+    drmModeFreeCrtc(out->saved_crtc);
+    drmModeAtomicFree(out->video_request);
+    modeset_cleanup(fd, out);
+    close(fd);
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -1055,6 +1112,10 @@ int main(int argc, char **argv)
     }
     __OnArgument("--aw-display") {
         aw_display=true;
+        continue;
+    }
+    __OnArgument("--color-cycle") {
+        color_cycle=true;
         continue;
     }
     __OnArgument("--rmode") {
@@ -1093,6 +1154,9 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGPIPE, sig_handler);
     printf("Rendering mode %d\n",develop_rendering_mode);
+    if(color_cycle){
+        return run_color_cycle(mode_width,mode_height,mode_vrefresh);
+    }
     if(aw_display){
         if(udp_port==-1){
             printf("--aw-display requires --udp-port\n");
