@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <thread>
 #include <unistd.h>
 
 #ifndef DEFAULT_PRELOAD_PATH
@@ -96,6 +97,34 @@ static void ensure_preload_in_environment() {
     }
 }
 
+static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
+    std::thread([fd, stream, prefix]() {
+        char buffer[512];
+        bool at_line_start = true;
+        while (1) {
+            ssize_t bytes = read(fd, buffer, sizeof(buffer));
+            if (bytes <= 0)
+                break;
+
+            size_t offset = 0;
+            while (offset < static_cast<size_t>(bytes)) {
+                if (at_line_start && prefix) {
+                    fputs(prefix, stream);
+                }
+
+                char *newline = static_cast<char *>(memchr(buffer + offset, '\n', bytes - offset));
+                size_t chunk = newline ? static_cast<size_t>(newline - (buffer + offset) + 1)
+                                       : static_cast<size_t>(bytes - offset);
+                fwrite(buffer + offset, 1, chunk, stream);
+                fflush(stream);
+                at_line_start = newline != nullptr;
+                offset += chunk;
+            }
+        }
+        close(fd);
+    }).detach();
+}
+
 int main(int argc, char **argv) {
     const char *drm_node = "/dev/dri/card0";
     const char *socket_path = "/tmp/drm-master";
@@ -134,6 +163,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    int stdout_pipe[2] = {-1, -1};
+    int stderr_pipe[2] = {-1, -1};
+    bool capture_qopenhd_logs = pipe(stdout_pipe) == 0 && pipe(stderr_pipe) == 0;
+    if (!capture_qopenhd_logs) {
+        if (stdout_pipe[0] >= 0) {
+            close(stdout_pipe[0]);
+            close(stdout_pipe[1]);
+        }
+        if (stderr_pipe[0] >= 0) {
+            close(stderr_pipe[0]);
+            close(stderr_pipe[1]);
+        }
+    }
+
     pid_t qopenhd_pid = fork();
     if (qopenhd_pid == 0) {
         sleep(2);
@@ -154,10 +197,27 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (capture_qopenhd_logs) {
+            close(stdout_pipe[0]);
+            close(stderr_pipe[0]);
+            dup2(stdout_pipe[1], STDOUT_FILENO);
+            dup2(stderr_pipe[1], STDERR_FILENO);
+            close(stdout_pipe[1]);
+            close(stderr_pipe[1]);
+        }
+
+        setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
         ensure_preload_in_environment();
-        execlp("qopenhd", "qopenhd", NULL);
+        execlp("qopenhd", "qopenhd", "--platform=eglfs", NULL);
         perror("execlp qopenhd");
         return 1;
+    }
+
+    if (capture_qopenhd_logs) {
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        pipe_output_to_stream(stdout_pipe[0], stdout, "[qopenhd] ");
+        pipe_output_to_stream(stderr_pipe[0], stderr, "[qopenhd] ");
     }
 
     printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
@@ -167,6 +227,17 @@ int main(int argc, char **argv) {
     printf("\n");
     printf("Launched fpvue color cycle client as PID %d.\n", pid);
     printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
+    std::thread([qopenhd_pid]() {
+        int status = 0;
+        pid_t result = waitpid(qopenhd_pid, &status, 0);
+        if (result > 0) {
+            if (WIFEXITED(status)) {
+                fprintf(stderr, "QOpenHD exited with status %d.\n", WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                fprintf(stderr, "QOpenHD terminated by signal %d.\n", WTERMSIG(status));
+            }
+        }
+    }).detach();
     printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
