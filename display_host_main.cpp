@@ -1,16 +1,119 @@
 #include "display_host.h"
+#include <algorithm>
+#include <ctype.h>
+#include <fstream>
+#include <iterator>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 #ifndef DEFAULT_PRELOAD_PATH
 #define DEFAULT_PRELOAD_PATH ""
 #endif
+
+static std::vector<std::string> split_ld_preload(const char *preload) {
+    std::vector<std::string> tokens;
+    if (!preload || preload[0] == '\0')
+        return tokens;
+
+    const char *cursor = preload;
+    while (cursor && *cursor) {
+        const char *next = strchr(cursor, ':');
+        size_t token_len = next ? static_cast<size_t>(next - cursor) : strlen(cursor);
+        if (token_len > 0)
+            tokens.emplace_back(cursor, token_len);
+        if (!next)
+            break;
+        cursor = next + 1;
+    }
+
+    return tokens;
+}
+
+static std::string join_ld_preload(const std::vector<std::string> &tokens) {
+    std::string result;
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i].empty())
+            continue;
+        if (!result.empty())
+            result += ":";
+        result += tokens[i];
+    }
+    return result;
+}
+
+static bool locate_executable_path(const char *name, char *buffer, size_t size) {
+    if (!name || name[0] == '\0' || !buffer || size == 0)
+        return false;
+
+    if (strchr(name, '/')) {
+        if (access(name, X_OK) == 0) {
+            if (snprintf(buffer, size, "%s", name) < static_cast<int>(size))
+                return true;
+        }
+        return false;
+    }
+
+    const char *path_env = getenv("PATH");
+    if (!path_env)
+        return false;
+
+    char path_copy[4096];
+    strncpy(path_copy, path_env, sizeof(path_copy));
+    path_copy[sizeof(path_copy) - 1] = '\0';
+
+    char *saveptr = nullptr;
+    for (char *token = strtok_r(path_copy, ":", &saveptr); token; token = strtok_r(nullptr, ":", &saveptr)) {
+        if (snprintf(buffer, size, "%s/%s", token, name) >= static_cast<int>(size))
+            continue;
+        if (access(buffer, X_OK) == 0)
+            return true;
+    }
+
+    return false;
+}
+
+static bool extract_linked_library(const char *executable_path, const char *library_prefix, char *buffer, size_t size) {
+    if (!executable_path || !library_prefix || !buffer || size == 0)
+        return false;
+
+    std::ifstream file(executable_path, std::ios::binary);
+    if (!file)
+        return false;
+
+    std::vector<char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    if (data.empty())
+        return false;
+
+    const std::string prefix(library_prefix);
+    for (size_t i = 0; i + prefix.size() <= data.size(); ++i) {
+        if (memcmp(&data[i], prefix.data(), prefix.size()) == 0) {
+            size_t end = i + prefix.size();
+            while (end < data.size()) {
+                char ch = data[end];
+                if (ch == '\0' || (!isalnum(static_cast<unsigned char>(ch)) && ch != '.' && ch != '_' && ch != '-'))
+                    break;
+                ++end;
+            }
+
+            size_t length = end - i;
+            if (length >= size)
+                length = size - 1;
+            memcpy(buffer, &data[i], length);
+            buffer[length] = '\0';
+            return true;
+        }
+    }
+
+    return false;
+}
 
 static int build_preload_path(char *buffer, size_t size) {
     char exe_path[PATH_MAX];
@@ -56,45 +159,55 @@ static void configure_shared_drm_environment(const char *socket_path, const char
     setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
 }
 
-static void ensure_preload_in_environment() {
+static void ensure_preload_in_environment(const char *target_executable) {
     char preload[PATH_MAX];
     if (build_preload_path(preload, sizeof(preload)) != 0) {
         fprintf(stderr, "Failed to locate libdrm_fd_preload.so; secondary clients may not receive DRM FD\n");
         return;
     }
 
-    const char *existing_preload = getenv("LD_PRELOAD");
-    if (existing_preload && existing_preload[0] != '\0') {
-        bool already_present = false;
-        const char *cursor = existing_preload;
-        const size_t preload_len = strlen(preload);
-        while (*cursor) {
-            const char *next = strchr(cursor, ':');
-            size_t token_len = next ? (size_t)(next - cursor) : strlen(cursor);
-            if (token_len == preload_len && strncmp(cursor, preload, token_len) == 0) {
-                already_present = true;
-                break;
+    char asan_library[256];
+    bool add_asan_preload = false;
+    if (target_executable && target_executable[0] != '\0') {
+        char executable_path[PATH_MAX];
+        if (locate_executable_path(target_executable, executable_path, sizeof(executable_path))) {
+            if (extract_linked_library(executable_path, "libasan.so", asan_library, sizeof(asan_library))) {
+                add_asan_preload = true;
             }
-            if (!next)
-                break;
-            cursor = next + 1;
         }
-
-        char combined[4096];
-        int written;
-        if (already_present) {
-            written = snprintf(combined, sizeof(combined), "%s", existing_preload);
-        } else {
-            written = snprintf(combined, sizeof(combined), "%s:%s", existing_preload, preload);
-        }
-        if (written >= 0 && written < (int)sizeof(combined)) {
-            setenv("LD_PRELOAD", combined, 1);
-        } else {
-            fprintf(stderr, "Failed to update LD_PRELOAD; buffer too small\n");
-        }
-    } else {
-        setenv("LD_PRELOAD", preload, 1);
     }
+
+    const char *existing_preload = getenv("LD_PRELOAD");
+    std::vector<std::string> tokens = split_ld_preload(existing_preload);
+    std::vector<std::string> filtered_tokens;
+    std::string asan_entry;
+
+    for (const std::string &token : tokens) {
+        if (token.empty())
+            continue;
+        if (token.find("libasan.so") != std::string::npos) {
+            if (asan_entry.empty())
+                asan_entry = token;
+            continue;
+        }
+        if (token == preload)
+            continue;
+        filtered_tokens.push_back(token);
+    }
+
+    if (asan_entry.empty() && add_asan_preload)
+        asan_entry = asan_library;
+
+    std::vector<std::string> final_tokens;
+    if (!asan_entry.empty())
+        final_tokens.push_back(asan_entry);
+    final_tokens.insert(final_tokens.end(), filtered_tokens.begin(), filtered_tokens.end());
+    if (std::find(final_tokens.begin(), final_tokens.end(), std::string(preload)) == final_tokens.end())
+        final_tokens.push_back(preload);
+
+    std::string combined_preload = join_ld_preload(final_tokens);
+    if (!combined_preload.empty())
+        setenv("LD_PRELOAD", combined_preload.c_str(), 1);
 }
 
 static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
@@ -207,7 +320,7 @@ int main(int argc, char **argv) {
         }
 
         setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
-        ensure_preload_in_environment();
+        ensure_preload_in_environment("qopenhd");
         execlp("qopenhd", "qopenhd", "--platform=eglfs", NULL);
         perror("execlp qopenhd");
         return 1;
