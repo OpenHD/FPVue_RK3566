@@ -1050,7 +1050,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
         }
     }
     struct modeset_output *out = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh);
+    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_ARGB8888);
     if (ret) {
         close(fd);
         free(out);
@@ -1071,7 +1071,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
     }
     ret = modeset_perform_modeset(fd, out, out->video_request, &out->video_plane,
                                   bufs[0].fb, bufs[0].width, bufs[0].height, video_zpos);
-    if (ret < 0 && errno == EACCES) {
+    if (ret == -EACCES || ret == -EPERM) {
         drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
         if (plane_res) {
             for (uint32_t p = 0; p < plane_res->count_planes && ret < 0; ++p) {
@@ -1084,7 +1084,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
                 bool usable = false;
                 if (plane->possible_crtcs & (1 << out->crtc_index)) {
                     for (int j = 0; j < plane->count_formats; j++) {
-                        if (plane->formats[j] == DRM_FORMAT_NV12) {
+                        if (plane->formats[j] == DRM_FORMAT_ARGB8888) {
                             usable = true;
                             break;
                         }
@@ -1253,7 +1253,7 @@ int main(int argc, char **argv)
         assert(drm_fd >= 0);
     }
     output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-    ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh);
+    ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_NV12);
     assert(!ret);
 
     ////////////////////////////////// MPI SETUP

@@ -200,8 +200,10 @@ int modeset_find_crtc(int fd, drmModeRes *res, drmModeConnector *conn, struct mo
 	return -ENOENT;
 }
 
-const char* drm_fourcc_to_string(uint32_t fourcc) {
+char* drm_fourcc_to_string(uint32_t fourcc) {
     char* result = malloc(5);
+    if (!result)
+            return NULL;
     result[0] = (char)((fourcc >> 0) & 0xFF);
     result[1] = (char)((fourcc >> 8) & 0xFF);
     result[2] = (char)((fourcc >> 16) & 0xFF);
@@ -394,7 +396,7 @@ void modeset_output_destroy(int fd, struct modeset_output *out)
         free(out);
 }
 
-struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeConnector *conn, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh)
+struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeConnector *conn, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format)
 {
 	int ret;
 	struct modeset_output *out;
@@ -446,12 +448,18 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 		goto out_blob;
 	}
 
-	ret = modeset_find_plane(fd, out, &out->video_plane, DRM_FORMAT_NV12);
-	if (ret) {
-		fprintf(stderr, "no valid video plane with format NV12 for crtc %u\n", out->crtc.id);
-		goto out_blob;
-	}
-	fprintf(stdout, "Using plane %d (NV12) for Video\n",  out->video_plane.id);
+        ret = modeset_find_plane(fd, out, &out->video_plane, plane_format);
+        if (ret) {
+                char *format_str = drm_fourcc_to_string(plane_format);
+                fprintf(stderr, "no valid video plane with format %s for crtc %u\n",
+                        format_str ? format_str : "????", out->crtc.id);
+                free(format_str);
+                goto out_blob;
+        }
+        char *format_str = drm_fourcc_to_string(plane_format);
+        fprintf(stdout, "Using plane %d (%s) for Video\n",  out->video_plane.id,
+                format_str ? format_str : "????");
+        free(format_str);
 
         ret = modeset_setup_objects(fd, out);
         if (ret) {
@@ -481,42 +489,45 @@ out_error:
 }
 
 
-int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh)
+int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format)
 {
-	drmModeRes *res;
-	drmModeConnector *conn;
-	unsigned int i;
-	struct modeset_output *out;
+        drmModeRes *res;
+        drmModeConnector *conn;
+        unsigned int i;
+        struct modeset_output *out;
+        bool found_output = false;
 
-	res = drmModeGetResources(fd);
-	if (!res) {
-		fprintf(stderr, "cannot retrieve DRM resources (%d): %m\n",
-			errno);
-		return -errno;
-	}
+        res = drmModeGetResources(fd);
+        if (!res) {
+                fprintf(stderr, "cannot retrieve DRM resources (%d): %m\n",
+                        errno);
+                return -errno;
+        }
 
-	for (i = 0; i < res->count_connectors; ++i) {
-		conn = drmModeGetConnector(fd, res->connectors[i]);
-		if (!conn) {
-			fprintf(stderr, "cannot retrieve DRM connector %u:%u (%d): %m\n",
-				i, res->connectors[i], errno);
-			continue;
-		}
+        for (i = 0; i < res->count_connectors; ++i) {
+                conn = drmModeGetConnector(fd, res->connectors[i]);
+                if (!conn) {
+                        fprintf(stderr, "cannot retrieve DRM connector %u:%u (%d): %m\n",
+                                i, res->connectors[i], errno);
+                        continue;
+                }
 
-		out = modeset_output_create(fd, res, conn, mode_width, mode_height, mode_vrefresh);
-		drmModeFreeConnector(conn);
-		if (!out)
-			continue;
+                out = modeset_output_create(fd, res, conn, mode_width, mode_height, mode_vrefresh, plane_format);
+                drmModeFreeConnector(conn);
+                if (!out)
+                        continue;
 
-		*output_list = *out;
-	}
-	if (!output_list) {
-		fprintf(stderr, "couldn't create any outputs\n");
-		return -1;
-	}
+                *output_list = *out;
+                found_output = true;
+                free(out);
+        }
+        drmModeFreeResources(res);
+        if (!found_output) {
+                fprintf(stderr, "couldn't create any outputs\n");
+                return -1;
+        }
 
-	drmModeFreeResources(res);
-	return 0;
+        return 0;
 }
 
 int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq * req, struct drm_object *plane, int fb_id, int width, int height, int zpos)
