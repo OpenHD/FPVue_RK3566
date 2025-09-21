@@ -88,7 +88,7 @@ bool AllwinnerV4L2Display::setup_network() {
 
 bool AllwinnerV4L2Display::setup_drm() {
   if (modeset_open(&m_drm_fd, "/dev/dri/card0") < 0) return false;
-  if (modeset_prepare(m_drm_fd, &m_output, kVideoWidth, kVideoHeight, 60) <
+  if (modeset_prepare(m_drm_fd, &m_output, kVideoWidth, kVideoHeight, 60, DRM_FORMAT_NV12) <
       0)
     return false;
   return true;
