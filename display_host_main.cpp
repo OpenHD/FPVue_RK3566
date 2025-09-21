@@ -346,14 +346,6 @@ int main(int argc, char **argv) {
             }
         }
 
-        /*
-         * Ensure the Qt based client avoids the primary plane that is already
-         * occupied by the fpvue colour-cycle client.  The LD_PRELOAD helper
-         * honours this environment variable by filtering primary planes from
-         * the enumeration it exposes to secondary clients.
-         */
-        setenv("FPVUE_FILTER_PRIMARY_PLANES", "1", 1);
-
         const char *kms_atomic = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
         if (!kms_atomic || kms_atomic[0] == '\0')
             setenv("QT_QPA_EGLFS_KMS_ATOMIC", "1", 1);
