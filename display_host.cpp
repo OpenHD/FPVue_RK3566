@@ -111,7 +111,8 @@ int start_display_host(const char *drm_node, const char *socket_path, int client
             close(fd);
             return -1;
         }
-        if (modeset_prepare(fd, out, mode_width, mode_height, 60, DRM_FORMAT_ARGB8888) == 0) {
+        if (modeset_prepare(fd, out, mode_width, mode_height, 60, DRM_FORMAT_ARGB8888,
+                            MODESET_PLANE_TYPE_PRIMARY) == 0) {
             struct modeset_buf buf = {0};
             buf.width = mode_width;
             buf.height = mode_height;

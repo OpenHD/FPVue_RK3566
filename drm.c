@@ -242,7 +242,7 @@ char* drm_fourcc_to_string(uint32_t fourcc) {
     return result;
 }
 
-int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *plane_out, uint32_t plane_format)
+int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *plane_out, uint32_t plane_format, enum modeset_plane_type plane_type)
 {
         drmModePlaneResPtr plane_res;
         bool found_plane = false;
@@ -256,7 +256,12 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
                 return -ENOENT;
         }
 
-        bool prefer_primary = (plane_format == DRM_FORMAT_ARGB8888);
+        bool prefer_primary = (plane_type == MODESET_PLANE_TYPE_PRIMARY) ||
+                              (plane_type == MODESET_PLANE_TYPE_ANY && plane_format == DRM_FORMAT_ARGB8888);
+        bool prefer_overlay = (plane_type == MODESET_PLANE_TYPE_OVERLAY) ||
+                              (plane_type == MODESET_PLANE_TYPE_ANY && plane_format != DRM_FORMAT_ARGB8888);
+        bool require_primary = (plane_type == MODESET_PLANE_TYPE_PRIMARY);
+        bool require_overlay = (plane_type == MODESET_PLANE_TYPE_OVERLAY);
         for (i = 0; i < plane_res->count_planes; i++) {
                 int plane_id = plane_res->planes[i];
                 bool matches = false;
@@ -279,15 +284,25 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
                 }
 
                 if (matches) {
-                        uint64_t plane_type;
-                        if (get_plane_type_value(fd, plane_id, &plane_type)) {
-                                if (plane_type == DRM_PLANE_TYPE_PRIMARY) {
-                                        priority = prefer_primary ? 0 : 1;
-                                } else if (plane_type == DRM_PLANE_TYPE_OVERLAY) {
-                                        priority = prefer_primary ? 1 : 0;
+                        uint64_t plane_type_value;
+                        if (get_plane_type_value(fd, plane_id, &plane_type_value)) {
+                                if (plane_type_value == DRM_PLANE_TYPE_PRIMARY) {
+                                        if (require_overlay) {
+                                                matches = false;
+                                        } else {
+                                                priority = prefer_primary ? 0 : 1;
+                                        }
+                                } else if (plane_type_value == DRM_PLANE_TYPE_OVERLAY) {
+                                        if (require_primary) {
+                                                matches = false;
+                                        } else {
+                                                priority = prefer_overlay ? 0 : 1;
+                                        }
                                 } else {
                                         matches = false;
                                 }
+                        } else {
+                                matches = false;
                         }
                 }
 
@@ -450,7 +465,7 @@ void modeset_output_destroy(int fd, struct modeset_output *out)
         free(out);
 }
 
-struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeConnector *conn, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format)
+struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeConnector *conn, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format, enum modeset_plane_type plane_type)
 {
 	int ret;
 	struct modeset_output *out;
@@ -502,11 +517,16 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 		goto out_blob;
 	}
 
-        ret = modeset_find_plane(fd, out, &out->video_plane, plane_format);
+        ret = modeset_find_plane(fd, out, &out->video_plane, plane_format, plane_type);
         if (ret) {
                 char *format_str = drm_fourcc_to_string(plane_format);
-                fprintf(stderr, "no valid video plane with format %s for crtc %u\n",
-                        format_str ? format_str : "????", out->crtc.id);
+                const char *type_requirement = "any";
+                if (plane_type == MODESET_PLANE_TYPE_PRIMARY)
+                        type_requirement = "primary";
+                else if (plane_type == MODESET_PLANE_TYPE_OVERLAY)
+                        type_requirement = "overlay";
+                fprintf(stderr, "no valid %s video plane with format %s for crtc %u\n",
+                        type_requirement, format_str ? format_str : "????", out->crtc.id);
                 free(format_str);
                 goto out_blob;
         }
@@ -553,7 +573,7 @@ out_error:
 }
 
 
-int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format)
+int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh, uint32_t plane_format, enum modeset_plane_type plane_type)
 {
         drmModeRes *res;
         drmModeConnector *conn;
@@ -576,7 +596,7 @@ int modeset_prepare(int fd, struct modeset_output *output_list, uint16_t mode_wi
                         continue;
                 }
 
-                out = modeset_output_create(fd, res, conn, mode_width, mode_height, mode_vrefresh, plane_format);
+                out = modeset_output_create(fd, res, conn, mode_width, mode_height, mode_vrefresh, plane_format, plane_type);
                 drmModeFreeConnector(conn);
                 if (!out)
                         continue;

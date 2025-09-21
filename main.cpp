@@ -1050,7 +1050,8 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
         }
     }
     struct modeset_output *out = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_ARGB8888);
+    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_ARGB8888,
+                          MODESET_PLANE_TYPE_PRIMARY);
     if (ret) {
         close(fd);
         free(out);
@@ -1253,7 +1254,8 @@ int main(int argc, char **argv)
         assert(drm_fd >= 0);
     }
     output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-    ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_NV12);
+    ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_NV12,
+                          MODESET_PLANE_TYPE_PRIMARY);
     assert(!ret);
 
     ////////////////////////////////// MPI SETUP
