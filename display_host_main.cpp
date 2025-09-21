@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         if (!getenv("QT_QPA_PLATFORM"))
             setenv("QT_QPA_PLATFORM", "eglfs", 1);
         ensure_preload_in_environment();
-        execlp("qopenhd", "qopenhd", NULL);
+        execlp("qopenhd", "qopenhd", "--platform=eglfs", NULL);
         perror("execlp qopenhd");
         return 1;
     }

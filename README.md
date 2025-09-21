@@ -64,7 +64,9 @@ The `display_host` utility opens the DRM device, shares its file descriptor
 over a UNIX socket and launches `fpvue` in color cycle mode. This is useful for
 testing the display stack or sharing the DRM master with another application.
 It now also starts `qopenhd`, rendering the Qt UI on a higher z-position plane
-so the color cycle continues to be visible in the background.
+so the color cycle continues to be visible in the background. The host passes
+`--platform=eglfs` when launching `qopenhd` so it binds directly to the DRM
+overlay plane.
 
 Run the host:
 
