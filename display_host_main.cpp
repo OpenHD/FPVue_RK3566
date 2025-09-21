@@ -50,6 +50,52 @@ static int build_preload_path(char *buffer, size_t size) {
     return -1;
 }
 
+static void configure_shared_drm_environment(const char *socket_path, const char *drm_node) {
+    setenv("FPVUE_DRM_FD_SOCKET", socket_path, 1);
+    setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
+}
+
+static void ensure_preload_in_environment() {
+    char preload[PATH_MAX];
+    if (build_preload_path(preload, sizeof(preload)) != 0) {
+        fprintf(stderr, "Failed to locate libdrm_fd_preload.so; secondary clients may not receive DRM FD\n");
+        return;
+    }
+
+    const char *existing_preload = getenv("LD_PRELOAD");
+    if (existing_preload && existing_preload[0] != '\0') {
+        bool already_present = false;
+        const char *cursor = existing_preload;
+        const size_t preload_len = strlen(preload);
+        while (*cursor) {
+            const char *next = strchr(cursor, ':');
+            size_t token_len = next ? (size_t)(next - cursor) : strlen(cursor);
+            if (token_len == preload_len && strncmp(cursor, preload, token_len) == 0) {
+                already_present = true;
+                break;
+            }
+            if (!next)
+                break;
+            cursor = next + 1;
+        }
+
+        char combined[4096];
+        int written;
+        if (already_present) {
+            written = snprintf(combined, sizeof(combined), "%s", existing_preload);
+        } else {
+            written = snprintf(combined, sizeof(combined), "%s:%s", existing_preload, preload);
+        }
+        if (written >= 0 && written < (int)sizeof(combined)) {
+            setenv("LD_PRELOAD", combined, 1);
+        } else {
+            fprintf(stderr, "Failed to update LD_PRELOAD; buffer too small\n");
+        }
+    } else {
+        setenv("LD_PRELOAD", preload, 1);
+    }
+}
+
 int main(int argc, char **argv) {
     const char *drm_node = "/dev/dri/card0";
     const char *socket_path = "/tmp/drm-master";
@@ -81,58 +127,22 @@ int main(int argc, char **argv) {
     pid_t pid = fork();
     if (pid == 0) {
         sleep(1);
-        setenv("FPVUE_DRM_FD_SOCKET", socket_path, 1);
-        setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
+        configure_shared_drm_environment(socket_path, drm_node);
         setenv("FPVUE_COLOR_CYCLE_ZPOS", "0", 1);
         execlp("fpvue", "fpvue", "--color-cycle", NULL);
         perror("execlp fpvue");
         return 1;
     }
 
-    pid_t kmscube_pid = fork();
-    if (kmscube_pid == 0) {
+    pid_t qopenhd_pid = fork();
+    if (qopenhd_pid == 0) {
         sleep(2);
-        setenv("FPVUE_DRM_FD_SOCKET", socket_path, 1);
-        setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
-        char preload[PATH_MAX];
-        if (build_preload_path(preload, sizeof(preload)) == 0) {
-            const char *existing_preload = getenv("LD_PRELOAD");
-            if (existing_preload && existing_preload[0] != '\0') {
-                bool already_present = false;
-                const char *cursor = existing_preload;
-                const size_t preload_len = strlen(preload);
-                while (*cursor) {
-                    const char *next = strchr(cursor, ':');
-                    size_t token_len = next ? (size_t)(next - cursor) : strlen(cursor);
-                    if (token_len == preload_len && strncmp(cursor, preload, token_len) == 0) {
-                        already_present = true;
-                        break;
-                    }
-                    if (!next)
-                        break;
-                    cursor = next + 1;
-                }
-
-                char combined[4096];
-                int written;
-                if (already_present) {
-                    written = snprintf(combined, sizeof(combined), "%s", existing_preload);
-                } else {
-                    written = snprintf(combined, sizeof(combined), "%s:%s", existing_preload, preload);
-                }
-                if (written >= 0 && written < (int)sizeof(combined)) {
-                    setenv("LD_PRELOAD", combined, 1);
-                } else {
-                    fprintf(stderr, "Failed to update LD_PRELOAD; buffer too small\n");
-                }
-            } else {
-                setenv("LD_PRELOAD", preload, 1);
-            }
-        } else {
-            fprintf(stderr, "Failed to locate libdrm_fd_preload.so; kmscube may not receive DRM FD\n");
-        }
-        execlp("kmscube", "kmscube", "--atomic", NULL);
-        perror("execlp kmscube");
+        configure_shared_drm_environment(socket_path, drm_node);
+        if (!getenv("QT_QPA_PLATFORM"))
+            setenv("QT_QPA_PLATFORM", "eglfs", 1);
+        ensure_preload_in_environment();
+        execlp("qopenhd", "qopenhd", NULL);
+        perror("execlp qopenhd");
         return 1;
     }
 
@@ -142,8 +152,8 @@ int main(int argc, char **argv) {
     }
     printf("\n");
     printf("Launched fpvue color cycle client as PID %d.\n", pid);
-    printf("Launched kmscube client as PID %d using overlay plane.\n", kmscube_pid);
-    printf("To run a Qt5 application against this host, set FPVUE_DRM_FD_SOCKET=%s and export QT_QPA_PLATFORM=eglfs before launching your Qt app.\n", socket_path);
+    printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
+    printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {
