@@ -15,6 +15,36 @@
 #include <drm_fourcc.h>
 #include <assert.h>
 
+static bool get_plane_type_value(int fd, uint32_t plane_id, uint64_t *type_out)
+{
+        drmModeObjectPropertiesPtr props;
+        bool found = false;
+
+        props = drmModeObjectGetProperties(fd, plane_id, DRM_MODE_OBJECT_PLANE);
+        if (!props)
+                return false;
+
+        for (uint32_t i = 0; i < props->count_props; ++i) {
+                drmModePropertyPtr prop = drmModeGetProperty(fd, props->props[i]);
+                if (!prop)
+                        continue;
+
+                if (!strcmp(prop->name, "type")) {
+                        if (type_out)
+                                *type_out = props->prop_values[i];
+                        found = true;
+                        drmModeFreeProperty(prop);
+                        break;
+                }
+
+                drmModeFreeProperty(prop);
+        }
+
+        drmModeFreeObjectProperties(props);
+
+        return found;
+}
+
 int modeset_open(int *out, const char *node)
 {
 	int fd, ret;
@@ -214,44 +244,66 @@ char* drm_fourcc_to_string(uint32_t fourcc) {
 
 int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *plane_out, uint32_t plane_format)
 {
-	drmModePlaneResPtr plane_res;
-	bool found_plane = false;
-	int i, ret = -EINVAL;
+        drmModePlaneResPtr plane_res;
+        bool found_plane = false;
+        int best_priority = 3;
+        int i, ret = -EINVAL;
 
-	plane_res = drmModeGetPlaneResources(fd);
-	if (!plane_res) {
-		fprintf(stderr, "drmModeGetPlaneResources failed: %s\n",
-				strerror(errno));
-		return -ENOENT;
-	}
+        plane_res = drmModeGetPlaneResources(fd);
+        if (!plane_res) {
+                fprintf(stderr, "drmModeGetPlaneResources failed: %s\n",
+                                strerror(errno));
+                return -ENOENT;
+        }
 
-	for (i = 0; (i < plane_res->count_planes) && !found_plane; i++) {
-		int plane_id = plane_res->planes[i];
+        for (i = 0; i < plane_res->count_planes; i++) {
+                int plane_id = plane_res->planes[i];
+                bool matches = false;
+                int priority = 2;
 
-		drmModePlanePtr plane = drmModeGetPlane(fd, plane_id);
-		if (!plane) {
-			fprintf(stderr, "drmModeGetPlane(%u) failed: %s\n", plane_id,
-					strerror(errno));
-			continue;
-		}
+                drmModePlanePtr plane = drmModeGetPlane(fd, plane_id);
+                if (!plane) {
+                        fprintf(stderr, "drmModeGetPlane(%u) failed: %s\n", plane_id,
+                                        strerror(errno));
+                        continue;
+                }
 
-		if (plane->possible_crtcs & (1 << out->crtc_index)) {
-			for (int j=0; j<plane->count_formats; j++) {
-				if (plane->formats[j] ==  plane_format) {
-					found_plane = true;
-				 	plane_out->id = plane_id;
-				 	ret = 0;
-					break;
-				}
-			}
-		}
+                if (plane->possible_crtcs & (1 << out->crtc_index)) {
+                        for (int j = 0; j < plane->count_formats; j++) {
+                                if (plane->formats[j] == plane_format) {
+                                        matches = true;
+                                        break;
+                                }
+                        }
+                }
 
-		drmModeFreePlane(plane);
-	}
+                if (matches) {
+                        uint64_t plane_type;
+                        if (get_plane_type_value(fd, plane_id, &plane_type)) {
+                                if (plane_type == DRM_PLANE_TYPE_PRIMARY)
+                                        priority = 0;
+                                else if (plane_type == DRM_PLANE_TYPE_OVERLAY)
+                                        priority = 1;
+                                else
+                                        matches = false;
+                        }
+                }
 
-	drmModeFreePlaneResources(plane_res);
+                if (matches) {
+                        if (!found_plane || priority < best_priority) {
+                                plane_out->id = plane_id;
+                                best_priority = priority;
+                                ret = 0;
+                                found_plane = true;
+                        }
+                }
 
-	return ret;
+                drmModeFreePlane(plane);
+        }
+
+        drmModeFreePlaneResources(plane_res);
+
+        return ret;
 }
 
 
@@ -457,8 +509,18 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
                 goto out_blob;
         }
         char *format_str = drm_fourcc_to_string(plane_format);
-        fprintf(stdout, "Using plane %d (%s) for Video\n",  out->video_plane.id,
-                format_str ? format_str : "????");
+        const char *type_str = "unknown";
+        uint64_t plane_type_value;
+        if (get_plane_type_value(fd, out->video_plane.id, &plane_type_value)) {
+                if (plane_type_value == DRM_PLANE_TYPE_PRIMARY)
+                        type_str = "primary";
+                else if (plane_type_value == DRM_PLANE_TYPE_OVERLAY)
+                        type_str = "overlay";
+                else if (plane_type_value == DRM_PLANE_TYPE_CURSOR)
+                        type_str = "cursor";
+        }
+        fprintf(stdout, "Using plane %d (%s, %s) for Video\n",  out->video_plane.id,
+                format_str ? format_str : "????", type_str);
         free(format_str);
 
         ret = modeset_setup_objects(fd, out);
