@@ -13,9 +13,116 @@
 #include <unistd.h>
 #include <vector>
 
+extern "C" {
+#include "drm.h"
+}
+#include <xf86drmMode.h>
+
 #ifndef DEFAULT_PRELOAD_PATH
 #define DEFAULT_PRELOAD_PATH ""
 #endif
+
+struct PlaneAssignment {
+    uint32_t primary_plane_id = 0;
+    uint32_t overlay_plane_id = 0;
+    uint32_t connector_id = 0;
+    std::string connector_name;
+};
+
+static const char *connector_type_to_string(uint32_t type) {
+    switch (type) {
+    case DRM_MODE_CONNECTOR_VGA:
+        return "VGA";
+    case DRM_MODE_CONNECTOR_DVII:
+        return "DVI-I";
+    case DRM_MODE_CONNECTOR_DVID:
+        return "DVI-D";
+    case DRM_MODE_CONNECTOR_DVIA:
+        return "DVI-A";
+    case DRM_MODE_CONNECTOR_Composite:
+        return "Composite";
+    case DRM_MODE_CONNECTOR_SVIDEO:
+        return "SVIDEO";
+    case DRM_MODE_CONNECTOR_LVDS:
+        return "LVDS";
+    case DRM_MODE_CONNECTOR_Component:
+        return "Component";
+    case DRM_MODE_CONNECTOR_9PinDIN:
+        return "DIN";
+    case DRM_MODE_CONNECTOR_DisplayPort:
+        return "DP";
+    case DRM_MODE_CONNECTOR_HDMIA:
+        return "HDMI-A";
+    case DRM_MODE_CONNECTOR_HDMIB:
+        return "HDMI-B";
+    case DRM_MODE_CONNECTOR_TV:
+        return "TV";
+    case DRM_MODE_CONNECTOR_eDP:
+        return "eDP";
+    case DRM_MODE_CONNECTOR_VIRTUAL:
+        return "Virtual";
+    case DRM_MODE_CONNECTOR_DSI:
+        return "DSI";
+    case DRM_MODE_CONNECTOR_DPI:
+        return "DPI";
+#ifdef DRM_MODE_CONNECTOR_WRITEBACK
+    case DRM_MODE_CONNECTOR_WRITEBACK:
+        return "Writeback";
+#endif
+#ifdef DRM_MODE_CONNECTOR_SPI
+    case DRM_MODE_CONNECTOR_SPI:
+        return "SPI";
+#endif
+#ifdef DRM_MODE_CONNECTOR_USB
+    case DRM_MODE_CONNECTOR_USB:
+        return "USB";
+#endif
+    default:
+        return "Unknown";
+    }
+}
+
+static std::string build_connector_name(uint32_t type, uint32_t type_id) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%s-%u", connector_type_to_string(type), type_id);
+    return std::string(buffer);
+}
+
+static bool determine_plane_assignment(const char *drm_node, PlaneAssignment &assignment) {
+    assignment = PlaneAssignment{};
+    int fd;
+    if (modeset_open(&fd, drm_node) < 0) {
+        fprintf(stderr, "Failed to open DRM node %s when determining plane assignment.\n", drm_node);
+        return false;
+    }
+
+    struct modeset_output out{};
+    if (modeset_prepare(fd, &out, 0, 0, 0, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_PRIMARY) != 0) {
+        fprintf(stderr, "Unable to locate a primary plane on %s.\n", drm_node);
+        close(fd);
+        return false;
+    }
+
+    assignment.primary_plane_id = out.video_plane.id;
+    assignment.connector_id = out.connector.id;
+
+    struct drm_object overlay_plane{};
+    if (modeset_find_plane(fd, &out, &overlay_plane, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_OVERLAY) == 0) {
+        assignment.overlay_plane_id = overlay_plane.id;
+    } else {
+        fprintf(stderr, "Warning: no overlay plane supporting ARGB8888 detected on %s.\n", drm_node);
+    }
+
+    drmModeConnectorPtr connector = drmModeGetConnector(fd, assignment.connector_id);
+    if (connector) {
+        assignment.connector_name = build_connector_name(connector->connector_type, connector->connector_type_id);
+        drmModeFreeConnector(connector);
+    }
+
+    modeset_cleanup(fd, &out);
+    close(fd);
+    return assignment.primary_plane_id != 0;
+}
 
 static bool tokenize_preload_contains(const char *preload, const char *library) {
     if (!preload || !library || library[0] == '\0')
@@ -302,6 +409,18 @@ int main(int argc, char **argv) {
     if (clients < 2)
         clients = 2;
 
+    PlaneAssignment plane_assignment;
+    bool have_plane_assignment = determine_plane_assignment(drm_node, plane_assignment);
+    if (have_plane_assignment) {
+        const char *connector = plane_assignment.connector_name.empty() ? "connector" : plane_assignment.connector_name.c_str();
+        printf("Detected primary plane %u and overlay plane %u on %s.\n",
+               plane_assignment.primary_plane_id,
+               plane_assignment.overlay_plane_id,
+               connector);
+    } else {
+        fprintf(stderr, "Warning: failed to determine plane assignment; clients may contend for the same plane.\n");
+    }
+
     pid_t pid = fork();
     if (pid == 0) {
         sleep(1);
@@ -330,6 +449,16 @@ int main(int argc, char **argv) {
     if (qopenhd_pid == 0) {
         sleep(2);
         configure_shared_drm_environment(socket_path, drm_node);
+        if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
+            char reserved_planes[32];
+            snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
+            setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
+            if (plane_assignment.overlay_plane_id != 0) {
+                char overlay_plane[32];
+                snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
+                setenv("FPVUE_OVERLAY_PLANE_ID", overlay_plane, 1);
+            }
+        }
         const char *current_platform = getenv("QT_QPA_PLATFORM");
         if (!current_platform || strcmp(current_platform, "eglfs") != 0)
             setenv("QT_QPA_PLATFORM", "eglfs", 1);
@@ -400,7 +529,17 @@ int main(int argc, char **argv) {
     }
     printf("\n");
     printf("Launched fpvue color cycle client as PID %d.\n", pid);
-    printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
+    if (have_plane_assignment) {
+        printf("Reserved primary plane %u for fpvue.\n", plane_assignment.primary_plane_id);
+        if (plane_assignment.overlay_plane_id != 0) {
+            printf("Launched QOpenHD client as PID %d with overlay plane %u available.\n", qopenhd_pid,
+                   plane_assignment.overlay_plane_id);
+        } else {
+            printf("Launched QOpenHD client as PID %d with overlay plane discovery unavailable.\n", qopenhd_pid);
+        }
+    } else {
+        printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
+    }
     std::thread([qopenhd_pid]() {
         int status = 0;
         pid_t result = waitpid(qopenhd_pid, &status, 0);
