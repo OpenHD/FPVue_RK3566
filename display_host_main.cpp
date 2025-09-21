@@ -96,18 +96,25 @@ static bool determine_plane_assignment(const char *drm_node, PlaneAssignment &as
         return false;
     }
 
-    struct modeset_output out{};
-    if (modeset_prepare(fd, &out, 0, 0, 0, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_PRIMARY) != 0) {
-        fprintf(stderr, "Unable to locate a primary plane on %s.\n", drm_node);
+    struct modeset_output *out = static_cast<struct modeset_output *>(calloc(1, sizeof(*out)));
+    if (!out) {
+        fprintf(stderr, "Failed to allocate modeset output structure.\n");
         close(fd);
         return false;
     }
 
-    assignment.primary_plane_id = out.video_plane.id;
-    assignment.connector_id = out.connector.id;
+    if (modeset_prepare(fd, out, 0, 0, 0, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_PRIMARY) != 0) {
+        fprintf(stderr, "Unable to locate a primary plane on %s.\n", drm_node);
+        free(out);
+        close(fd);
+        return false;
+    }
+
+    assignment.primary_plane_id = out->video_plane.id;
+    assignment.connector_id = out->connector.id;
 
     struct drm_object overlay_plane{};
-    if (modeset_find_plane(fd, &out, &overlay_plane, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_OVERLAY) == 0) {
+    if (modeset_find_plane(fd, out, &overlay_plane, DRM_FORMAT_ARGB8888, MODESET_PLANE_TYPE_OVERLAY) == 0) {
         assignment.overlay_plane_id = overlay_plane.id;
     } else {
         fprintf(stderr, "Warning: no overlay plane supporting ARGB8888 detected on %s.\n", drm_node);
@@ -119,7 +126,7 @@ static bool determine_plane_assignment(const char *drm_node, PlaneAssignment &as
         drmModeFreeConnector(connector);
     }
 
-    modeset_cleanup(fd, &out);
+    modeset_cleanup(fd, out);
     close(fd);
     return assignment.primary_plane_id != 0;
 }
