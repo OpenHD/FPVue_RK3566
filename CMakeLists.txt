@@ -11,6 +11,8 @@ add_compile_options("-Wno-address-of-packed-member")
 
 SET(CMAKE_ASM_FLAGS "${CFLAGS} -x assembler-with-cpp")
 
+include(GNUInstallDirs)
+
 set(SOURCE_FILES drm.c
                                 rtp.c
         main.cpp
@@ -55,6 +57,10 @@ target_link_libraries(${PROJECT_NAME} ${LIBDRM_LIBRARIES})
 
 add_executable(display_host display_host_main.cpp display_host.cpp drm.c)
 target_link_libraries(display_host pthread m ${LIBDRM_LIBRARIES})
+target_compile_definitions(display_host PRIVATE DEFAULT_PRELOAD_PATH="${CMAKE_INSTALL_FULL_LIBDIR}/libdrm_fd_preload.so")
+
+add_library(drm_fd_preload SHARED drm_fd_preload.cpp display_host.cpp)
+target_link_libraries(drm_fd_preload pthread ${LIBDRM_LIBRARIES})
 
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -74,7 +80,7 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug")
   )
 endif()
 
-include(GNUInstallDirs)
-install(TARGETS ${PROJECT_NAME} display_host
+install(TARGETS ${PROJECT_NAME} display_host drm_fd_preload
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
