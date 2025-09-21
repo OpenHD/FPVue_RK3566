@@ -256,6 +256,7 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
                 return -ENOENT;
         }
 
+        bool prefer_primary = (plane_format == DRM_FORMAT_ARGB8888);
         for (i = 0; i < plane_res->count_planes; i++) {
                 int plane_id = plane_res->planes[i];
                 bool matches = false;
@@ -280,12 +281,13 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
                 if (matches) {
                         uint64_t plane_type;
                         if (get_plane_type_value(fd, plane_id, &plane_type)) {
-                                if (plane_type == DRM_PLANE_TYPE_PRIMARY)
-                                        priority = 0;
-                                else if (plane_type == DRM_PLANE_TYPE_OVERLAY)
-                                        priority = 1;
-                                else
+                                if (plane_type == DRM_PLANE_TYPE_PRIMARY) {
+                                        priority = prefer_primary ? 0 : 1;
+                                } else if (plane_type == DRM_PLANE_TYPE_OVERLAY) {
+                                        priority = prefer_primary ? 1 : 0;
+                                } else {
                                         matches = false;
+                                }
                         }
                 }
 
