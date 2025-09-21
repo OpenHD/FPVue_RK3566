@@ -17,11 +17,19 @@ static int (*real_open64_fn)(const char *pathname, int flags, ...);
 static pthread_mutex_t fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int shared_fd = -1;
 
-static const char *target_device_path(void) {
-    const char *path = getenv("FPVUE_DRM_DEVICE_PATH");
-    if (path && path[0] != '\0')
-        return path;
-    return "/dev/dri/card0";
+static bool should_intercept_path(const char *pathname) {
+    if (!pathname)
+        return false;
+
+    const char *device_path = getenv("FPVUE_DRM_DEVICE_PATH");
+    if (device_path && device_path[0] != '\0' && strcmp(pathname, device_path) == 0)
+        return true;
+
+    const char *socket_path = getenv("FPVUE_DRM_FD_SOCKET");
+    if (socket_path && socket_path[0] != '\0' && strcmp(pathname, socket_path) == 0)
+        return true;
+
+    return strcmp(pathname, "/dev/dri/card0") == 0;
 }
 
 static int ensure_real_open(void) {
@@ -73,7 +81,7 @@ extern "C" int open(const char *pathname, int flags, ...) {
         va_end(args);
     }
 
-    if (pathname && strcmp(pathname, target_device_path()) == 0) {
+    if (should_intercept_path(pathname)) {
         int fd = get_shared_fd();
         if (fd >= 0)
             return fd;
@@ -99,7 +107,7 @@ extern "C" int open64(const char *pathname, int flags, ...) {
         va_end(args);
     }
 
-    if (pathname && strcmp(pathname, target_device_path()) == 0) {
+    if (should_intercept_path(pathname)) {
         int fd = get_shared_fd();
         if (fd >= 0)
             return fd;
