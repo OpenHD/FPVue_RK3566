@@ -138,10 +138,24 @@ int main(int argc, char **argv) {
     if (qopenhd_pid == 0) {
         sleep(2);
         configure_shared_drm_environment(socket_path, drm_node);
-        if (!getenv("QT_QPA_PLATFORM"))
+        const char *current_platform = getenv("QT_QPA_PLATFORM");
+        if (!current_platform || strcmp(current_platform, "eglfs") != 0)
             setenv("QT_QPA_PLATFORM", "eglfs", 1);
+
+        const char *kms_config = getenv("QT_QPA_EGLFS_KMS_CONFIG");
+        if (!kms_config || kms_config[0] == '\0') {
+            const char *default_kms_config = "/root/kms.json";
+            if (access(default_kms_config, R_OK) == 0) {
+                setenv("QT_QPA_EGLFS_KMS_CONFIG", default_kms_config, 1);
+            } else {
+                fprintf(stderr,
+                        "Warning: default KMS config %s not accessible; QOpenHD may not bind to the expected plane\n",
+                        default_kms_config);
+            }
+        }
+
         ensure_preload_in_environment();
-        execlp("qopenhd", "qopenhd", "--platform eglfs", NULL);
+        execlp("qopenhd", "qopenhd", NULL);
         perror("execlp qopenhd");
         return 1;
     }
