@@ -295,8 +295,8 @@ int main(int argc, char **argv) {
         }
 
         setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
-        ensure_preload_in_environment("qopenhd");
-        execlp("qopenhd", "qopenhd", "--platform=eglfs", NULL);
+        ensure_preload_in_environment("QOpenHD");
+        execlp("QOpenHD", "QOpenHD", "--platform=eglfs", NULL);
         perror("execlp qopenhd");
         return 1;
     }
@@ -304,8 +304,8 @@ int main(int argc, char **argv) {
     if (capture_qopenhd_logs) {
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
-        pipe_output_to_stream(stdout_pipe[0], stdout, "[qopenhd] ");
-        pipe_output_to_stream(stderr_pipe[0], stderr, "[qopenhd] ");
+        pipe_output_to_stream(stdout_pipe[0], stdout, "[QOpenHD] ");
+        pipe_output_to_stream(stderr_pipe[0], stderr, "[QOpenHD] ");
     }
 
     printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
