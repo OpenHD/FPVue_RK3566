@@ -346,6 +346,10 @@ int main(int argc, char **argv) {
             }
         }
 
+        const char *kms_atomic = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
+        if (!kms_atomic || kms_atomic[0] == '\0')
+            setenv("QT_QPA_EGLFS_KMS_ATOMIC", "1", 1);
+
         if (capture_qopenhd_logs) {
             close(stdout_pipe[0]);
             close(stderr_pipe[0]);
@@ -360,17 +364,20 @@ int main(int argc, char **argv) {
         const char *ld_preload = getenv("LD_PRELOAD");
         const char *qt_platform_value = getenv("QT_QPA_PLATFORM");
         const char *kms_value = getenv("QT_QPA_EGLFS_KMS_CONFIG");
+        const char *kms_atomic_value = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
         const char *drm_socket = getenv("FPVUE_DRM_FD_SOCKET");
         const char *drm_device = getenv("FPVUE_DRM_DEVICE_PATH");
         fprintf(stderr,
                 "Launching QOpenHD command: QOpenHD --platform=eglfs\n"
                 "  QT_QPA_PLATFORM=%s\n"
                 "  QT_QPA_EGLFS_KMS_CONFIG=%s\n"
+                "  QT_QPA_EGLFS_KMS_ATOMIC=%s\n"
                 "  LD_PRELOAD=%s\n"
                 "  FPVUE_DRM_FD_SOCKET=%s\n"
                 "  FPVUE_DRM_DEVICE_PATH=%s\n",
                 qt_platform_value ? qt_platform_value : "(unset)",
                 kms_value ? kms_value : "(unset)",
+                kms_atomic_value ? kms_atomic_value : "(unset)",
                 ld_preload ? ld_preload : "(unset)",
                 drm_socket ? drm_socket : "(unset)",
                 drm_device ? drm_device : "(unset)");
