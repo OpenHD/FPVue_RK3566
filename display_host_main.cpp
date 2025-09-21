@@ -96,7 +96,38 @@ int main(int argc, char **argv) {
         setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
         char preload[PATH_MAX];
         if (build_preload_path(preload, sizeof(preload)) == 0) {
-            setenv("LD_PRELOAD", preload, 1);
+            const char *existing_preload = getenv("LD_PRELOAD");
+            if (existing_preload && existing_preload[0] != '\0') {
+                bool already_present = false;
+                const char *cursor = existing_preload;
+                const size_t preload_len = strlen(preload);
+                while (*cursor) {
+                    const char *next = strchr(cursor, ':');
+                    size_t token_len = next ? (size_t)(next - cursor) : strlen(cursor);
+                    if (token_len == preload_len && strncmp(cursor, preload, token_len) == 0) {
+                        already_present = true;
+                        break;
+                    }
+                    if (!next)
+                        break;
+                    cursor = next + 1;
+                }
+
+                char combined[4096];
+                int written;
+                if (already_present) {
+                    written = snprintf(combined, sizeof(combined), "%s", existing_preload);
+                } else {
+                    written = snprintf(combined, sizeof(combined), "%s:%s", existing_preload, preload);
+                }
+                if (written >= 0 && written < (int)sizeof(combined)) {
+                    setenv("LD_PRELOAD", combined, 1);
+                } else {
+                    fprintf(stderr, "Failed to update LD_PRELOAD; buffer too small\n");
+                }
+            } else {
+                setenv("LD_PRELOAD", preload, 1);
+            }
         } else {
             fprintf(stderr, "Failed to locate libdrm_fd_preload.so; kmscube may not receive DRM FD\n");
         }
