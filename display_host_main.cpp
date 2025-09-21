@@ -102,6 +102,49 @@ static bool extract_linked_library(const char *executable_path, const char *libr
     return false;
 }
 
+static bool locate_library_in_ldconfig(const char *library_prefix, char *buffer, size_t size) {
+    if (!library_prefix || !buffer || size == 0)
+        return false;
+
+    FILE *pipe = popen("ldconfig -p", "r");
+    if (!pipe)
+        return false;
+
+    bool found = false;
+    const size_t prefix_len = strlen(library_prefix);
+    char line[512];
+    while (fgets(line, sizeof(line), pipe)) {
+        char *cursor = line;
+        while (*cursor && isspace(static_cast<unsigned char>(*cursor)))
+            ++cursor;
+
+        if (strncmp(cursor, library_prefix, prefix_len) != 0)
+            continue;
+
+        char *arrow = strstr(cursor, "=>");
+        if (!arrow)
+            continue;
+        arrow += 2;
+        while (*arrow && isspace(static_cast<unsigned char>(*arrow)))
+            ++arrow;
+        if (!*arrow)
+            continue;
+
+        char *newline = strchr(arrow, '\n');
+        if (newline)
+            *newline = '\0';
+
+        if (snprintf(buffer, size, "%s", arrow) >= static_cast<int>(size))
+            continue;
+
+        found = true;
+        break;
+    }
+
+    pclose(pipe);
+    return found;
+}
+
 static int build_preload_path(char *buffer, size_t size) {
     char exe_path[PATH_MAX];
     ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
@@ -153,14 +196,27 @@ static void ensure_preload_in_environment(const char *target_executable) {
         return;
     }
 
-    char asan_library[256];
+    char asan_library[PATH_MAX];
     bool add_asan_preload = false;
     if (target_executable && target_executable[0] != '\0') {
         char executable_path[PATH_MAX];
         if (locate_executable_path(target_executable, executable_path, sizeof(executable_path))) {
             if (extract_linked_library(executable_path, "libasan.so", asan_library, sizeof(asan_library))) {
+                if (!strchr(asan_library, '/')) {
+                    char resolved[PATH_MAX];
+                    if (locate_library_in_ldconfig(asan_library, resolved, sizeof(resolved))) {
+                        strncpy(asan_library, resolved, sizeof(asan_library));
+                        asan_library[sizeof(asan_library) - 1] = '\0';
+                    }
+                }
                 add_asan_preload = true;
             }
+        }
+    }
+
+    if (!add_asan_preload && target_executable && strcmp(target_executable, "QOpenHD") == 0) {
+        if (locate_library_in_ldconfig("libasan.so", asan_library, sizeof(asan_library))) {
+            add_asan_preload = true;
         }
     }
 
@@ -172,6 +228,8 @@ static void ensure_preload_in_environment(const char *target_executable) {
             combined_preload = std::string(asan_library) + ":" + combined_preload;
         else
             combined_preload = asan_library;
+        fprintf(stderr, "Preloading %s before launching %s to satisfy AddressSanitizer.\n", asan_library,
+                target_executable ? target_executable : "client");
     }
 
     if (!tokenize_preload_contains(combined_preload.c_str(), preload)) {
@@ -182,6 +240,9 @@ static void ensure_preload_in_environment(const char *target_executable) {
 
     if (!combined_preload.empty()) {
         setenv("LD_PRELOAD", combined_preload.c_str(), 1);
+        if (target_executable && target_executable[0] != '\0') {
+            fprintf(stderr, "LD_PRELOAD for %s set to %s\n", target_executable, combined_preload.c_str());
+        }
     }
 }
 
@@ -296,6 +357,24 @@ int main(int argc, char **argv) {
 
         setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
         ensure_preload_in_environment("QOpenHD");
+        const char *ld_preload = getenv("LD_PRELOAD");
+        const char *qt_platform_value = getenv("QT_QPA_PLATFORM");
+        const char *kms_value = getenv("QT_QPA_EGLFS_KMS_CONFIG");
+        const char *drm_socket = getenv("FPVUE_DRM_FD_SOCKET");
+        const char *drm_device = getenv("FPVUE_DRM_DEVICE_PATH");
+        fprintf(stderr,
+                "Launching QOpenHD command: QOpenHD --platform=eglfs\n"
+                "  QT_QPA_PLATFORM=%s\n"
+                "  QT_QPA_EGLFS_KMS_CONFIG=%s\n"
+                "  LD_PRELOAD=%s\n"
+                "  FPVUE_DRM_FD_SOCKET=%s\n"
+                "  FPVUE_DRM_DEVICE_PATH=%s\n",
+                qt_platform_value ? qt_platform_value : "(unset)",
+                kms_value ? kms_value : "(unset)",
+                ld_preload ? ld_preload : "(unset)",
+                drm_socket ? drm_socket : "(unset)",
+                drm_device ? drm_device : "(unset)");
+        fflush(stderr);
         execlp("QOpenHD", "QOpenHD", "--platform=eglfs", NULL);
         perror("execlp qopenhd");
         return 1;
