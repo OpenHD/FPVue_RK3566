@@ -1029,6 +1029,12 @@ bool color_cycle=false;
 int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh){
     int ret;
     int fd;
+    int video_zpos = 0;
+    const char* zpos_env = getenv("FPVUE_COLOR_CYCLE_ZPOS");
+    if (zpos_env && *zpos_env) {
+        video_zpos = atoi(zpos_env);
+        printf("Color cycle using zpos %d\n", video_zpos);
+    }
     const char* fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
     if (fd_socket) {
         fd = receive_fd_from_socket(fd_socket);
@@ -1064,7 +1070,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
         }
     }
     ret = modeset_perform_modeset(fd, out, out->video_request, &out->video_plane,
-                                  bufs[0].fb, bufs[0].width, bufs[0].height, 0);
+                                  bufs[0].fb, bufs[0].width, bufs[0].height, video_zpos);
     if (ret < 0 && errno == EACCES) {
         drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
         if (plane_res) {
@@ -1093,7 +1099,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
                 drmModeAtomicSetCursor(out->video_request, 0);
                 ret = modeset_perform_modeset(fd, out, out->video_request,
                                               &out->video_plane, bufs[0].fb,
-                                              bufs[0].width, bufs[0].height, 0);
+                                              bufs[0].width, bufs[0].height, video_zpos);
             }
             drmModeFreePlaneResources(plane_res);
         }
