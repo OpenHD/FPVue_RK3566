@@ -63,8 +63,8 @@ fpvue --color-cycle
 The `display_host` utility opens the DRM device, shares its file descriptor
 over a UNIX socket and launches `fpvue` in color cycle mode. This is useful for
 testing the display stack or sharing the DRM master with another application.
-It now also starts a `kmscube` instance that renders on a higher z-position
-plane so the color cycle continues to be visible in the background.
+It now also starts `qopenhd`, rendering the Qt UI on a higher z-position plane
+so the color cycle continues to be visible in the background.
 
 Run the host:
 
@@ -73,9 +73,9 @@ display_host 720p
 ```
 
 `display_host` automatically injects the `libdrm_fd_preload.so` shim in front of
-`kmscube` so it can reuse the DRM master provided over the UNIX socket. The shim
-intercepts calls to open `/dev/dri/card0` and replaces them with the descriptor
-received from the host. To change the default device path, export
+Qt clients so they can reuse the DRM master provided over the UNIX socket. The
+shim intercepts calls to open `/dev/dri/card0` and replaces them with the
+descriptor received from the host. To change the default device path, export
 `FPVUE_DRM_DEVICE_PATH` before launching the host.
 
 To run a Qt5 application against this host, point Qt at the DRM FD socket and
@@ -87,7 +87,9 @@ export QT_QPA_PLATFORM=eglfs
 ```
 
 The socket path must match the one passed to `display_host` via `--socket`
- (default: `/tmp/drm-master`).
+(default: `/tmp/drm-master`). Qt applications launched by `display_host` set the
+`QT_QPA_PLATFORM` environment variable automatically, but the manual export is
+useful when launching additional clients.
 
 ### Allwinner A733 experimental mode
 
