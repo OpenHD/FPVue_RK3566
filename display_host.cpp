@@ -38,6 +38,18 @@ static int send_fd(int sock, int fd) {
     return 0;
 }
 
+static bool acquire_drm_master(int fd) {
+    if (drmSetMaster(fd) == 0)
+        return true;
+
+    drm_magic_t magic = 0;
+    if (drmGetMagic(fd, &magic) == 0 && drmAuthMagic(fd, magic) == 0)
+        return true;
+
+    fprintf(stderr, "Failed to acquire DRM master access: %s\n", strerror(errno));
+    return false;
+}
+
 int send_drm_fd_to_socket(int fd, const char *socket_path) {
     struct sockaddr_un addr;
     int sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -102,6 +114,12 @@ int start_display_host(const char *drm_node, const char *socket_path, int client
         fprintf(stderr, "Failed to open DRM node %s\n", drm_node);
         return -1;
     }
+
+    if (!acquire_drm_master(fd)) {
+        close(fd);
+        return -1;
+    }
+
     printf("Opened DRM node %s with fd %d\n", drm_node, fd);
 
     if (mode_width > 0 && mode_height > 0) {
