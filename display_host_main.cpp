@@ -1,5 +1,7 @@
 #include "display_host.h"
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <fstream>
 #include <iterator>
 #include <limits.h>
@@ -12,6 +14,9 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+#include <drm_fourcc.h>
 
 #ifndef DEFAULT_PRELOAD_PATH
 #define DEFAULT_PRELOAD_PATH ""
@@ -189,6 +194,170 @@ static void configure_shared_drm_environment(const char *socket_path, const char
     setenv("FPVUE_DRM_DEVICE_PATH", drm_node, 1);
 }
 
+static bool get_plane_type_value(int fd, uint32_t plane_id, uint64_t *type_out) {
+    drmModeObjectPropertiesPtr props =
+        drmModeObjectGetProperties(fd, plane_id, DRM_MODE_OBJECT_PLANE);
+    if (!props)
+        return false;
+
+    bool found = false;
+    for (uint32_t i = 0; i < props->count_props; ++i) {
+        drmModePropertyPtr prop = drmModeGetProperty(fd, props->props[i]);
+        if (!prop)
+            continue;
+
+        if (strcmp(prop->name, "type") == 0) {
+            if (type_out)
+                *type_out = props->prop_values[i];
+            found = true;
+            drmModeFreeProperty(prop);
+            break;
+        }
+
+        drmModeFreeProperty(prop);
+    }
+
+    drmModeFreeObjectProperties(props);
+    return found;
+}
+
+static bool plane_supports_argb8888(const drmModePlanePtr plane) {
+    if (!plane)
+        return false;
+
+    for (uint32_t i = 0; i < plane->count_formats; ++i) {
+        if (plane->formats[i] == DRM_FORMAT_ARGB8888 || plane->formats[i] == DRM_FORMAT_XRGB8888)
+            return true;
+    }
+
+    return false;
+}
+
+static bool determine_active_crtc_index(int fd, uint32_t *crtc_index_out) {
+    drmModeRes *resources = drmModeGetResources(fd);
+    if (!resources)
+        return false;
+
+    bool found = false;
+    uint32_t crtc_index = 0;
+    const bool has_crtcs = resources->count_crtcs > 0;
+
+    for (int i = 0; i < resources->count_connectors && !found; ++i) {
+        drmModeConnector *connector = drmModeGetConnector(fd, resources->connectors[i]);
+        if (!connector)
+            continue;
+
+        if (connector->connection == DRM_MODE_CONNECTED && connector->count_modes > 0) {
+            for (int j = 0; j < connector->count_encoders && !found; ++j) {
+                uint32_t encoder_id = connector->encoders[j];
+                drmModeEncoder *encoder = drmModeGetEncoder(fd, encoder_id);
+                if (!encoder)
+                    continue;
+
+                uint32_t crtc_id = encoder->crtc_id;
+                for (int k = 0; k < resources->count_crtcs; ++k) {
+                    if (resources->crtcs[k] == static_cast<int>(crtc_id)) {
+                        crtc_index = static_cast<uint32_t>(k);
+                        found = true;
+                        break;
+                    }
+                }
+
+                drmModeFreeEncoder(encoder);
+            }
+        }
+
+        drmModeFreeConnector(connector);
+    }
+
+    if (!found && has_crtcs)
+        crtc_index = 0;
+
+    bool success = found || has_crtcs;
+    drmModeFreeResources(resources);
+
+    if (success) {
+        if (crtc_index_out)
+            *crtc_index_out = crtc_index;
+        return true;
+    }
+
+    return false;
+}
+
+static bool find_overlay_plane_for_crtc(int fd, uint32_t crtc_index, uint32_t *plane_id_out) {
+    drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
+    if (!plane_res)
+        return false;
+
+    bool found = false;
+    uint32_t plane_id = 0;
+
+    for (uint32_t i = 0; i < plane_res->count_planes; ++i) {
+        uint32_t candidate = plane_res->planes[i];
+        drmModePlanePtr plane = drmModeGetPlane(fd, candidate);
+        if (!plane)
+            continue;
+
+        bool usable = (plane->possible_crtcs & (1u << crtc_index)) != 0 && plane_supports_argb8888(plane);
+        if (usable) {
+            uint64_t type = 0;
+            if (get_plane_type_value(fd, candidate, &type) && type == DRM_PLANE_TYPE_OVERLAY) {
+                plane_id = candidate;
+                found = true;
+                drmModeFreePlane(plane);
+                break;
+            }
+        }
+
+        drmModeFreePlane(plane);
+    }
+
+    drmModeFreePlaneResources(plane_res);
+
+    if (found && plane_id_out)
+        *plane_id_out = plane_id;
+
+    return found;
+}
+
+static bool build_planes_for_crtc_value(const char *drm_node, std::string &value_out) {
+    if (!drm_node || drm_node[0] == '\0')
+        return false;
+
+    int fd = open(drm_node, O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+        fprintf(stderr, "Failed to open DRM device %s: %s\n", drm_node, strerror(errno));
+        return false;
+    }
+
+    if (drmSetClientCap(fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) != 0)
+        fprintf(stderr, "Warning: Failed to enable universal planes capability on %s\n", drm_node);
+
+    uint32_t crtc_index = 0;
+    if (!determine_active_crtc_index(fd, &crtc_index)) {
+        fprintf(stderr, "Failed to determine active CRTC for %s\n", drm_node);
+        close(fd);
+        return false;
+    }
+
+    uint32_t plane_id = 0;
+    if (!find_overlay_plane_for_crtc(fd, crtc_index, &plane_id)) {
+        fprintf(stderr, "Failed to find overlay plane for CRTC %u on %s\n", crtc_index, drm_node);
+        close(fd);
+        return false;
+    }
+
+    close(fd);
+
+    char buffer[64];
+    if (snprintf(buffer, sizeof(buffer), "%u:%u", crtc_index, plane_id) >= static_cast<int>(sizeof(buffer)))
+        return false;
+
+    value_out.assign(buffer);
+    return true;
+}
+
 static void ensure_preload_in_environment(const char *target_executable) {
     char preload[PATH_MAX];
     if (build_preload_path(preload, sizeof(preload)) != 0) {
@@ -353,6 +522,24 @@ int main(int argc, char **argv) {
         if (!current_platform || strcmp(current_platform, "eglfs") != 0)
             setenv("QT_QPA_PLATFORM", "eglfs", 1);
 
+        setenv("QT_QPA_EGLFS_KMS_ZPOS", "2", 1);
+        const char *existing_planes = getenv("QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC");
+        if (!existing_planes || existing_planes[0] == '\0') {
+            const char *drm_device_path = getenv("FPVUE_DRM_DEVICE_PATH");
+            if (!drm_device_path || drm_device_path[0] == '\0')
+                drm_device_path = drm_node;
+
+            std::string planes_value;
+            if (build_planes_for_crtc_value(drm_device_path, planes_value)) {
+                setenv("QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC", planes_value.c_str(), 1);
+            } else {
+                fprintf(stderr,
+                        "Warning: Unable to determine overlay plane for QOpenHD on %s; using existing configuration\n",
+                        drm_device_path);
+            }
+        }
+        setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", "0", 1);
+
         const char *kms_config = getenv("QT_QPA_EGLFS_KMS_CONFIG");
         if (!kms_config || kms_config[0] == '\0') {
             const char *default_kms_config = "/root/kms.json";
@@ -384,6 +571,9 @@ int main(int argc, char **argv) {
         const char *qt_platform_value = getenv("QT_QPA_PLATFORM");
         const char *kms_value = getenv("QT_QPA_EGLFS_KMS_CONFIG");
         const char *kms_atomic_value = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
+        const char *kms_planes_value = getenv("QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC");
+        const char *kms_zpos_value = getenv("QT_QPA_EGLFS_KMS_ZPOS");
+        const char *kms_plane_index_value = getenv("QT_QPA_EGLFS_KMS_PLANE_INDEX");
         const char *drm_socket = getenv("FPVUE_DRM_FD_SOCKET");
         const char *drm_device = getenv("FPVUE_DRM_DEVICE_PATH");
         fprintf(stderr,
@@ -391,12 +581,18 @@ int main(int argc, char **argv) {
                 "  QT_QPA_PLATFORM=%s\n"
                 "  QT_QPA_EGLFS_KMS_CONFIG=%s\n"
                 "  QT_QPA_EGLFS_KMS_ATOMIC=%s\n"
+                "  QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC=%s\n"
+                "  QT_QPA_EGLFS_KMS_PLANE_INDEX=%s\n"
+                "  QT_QPA_EGLFS_KMS_ZPOS=%s\n"
                 "  LD_PRELOAD=%s\n"
                 "  FPVUE_DRM_FD_SOCKET=%s\n"
                 "  FPVUE_DRM_DEVICE_PATH=%s\n",
                 qt_platform_value ? qt_platform_value : "(unset)",
                 kms_value ? kms_value : "(unset)",
                 kms_atomic_value ? kms_atomic_value : "(unset)",
+                kms_planes_value ? kms_planes_value : "(unset)",
+                kms_plane_index_value ? kms_plane_index_value : "(unset)",
+                kms_zpos_value ? kms_zpos_value : "(unset)",
                 ld_preload ? ld_preload : "(unset)",
                 drm_socket ? drm_socket : "(unset)",
                 drm_device ? drm_device : "(unset)");
