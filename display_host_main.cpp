@@ -275,6 +275,25 @@ static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
 }
 
 int main(int argc, char **argv) {
+    int stop_sddm_status = system("sudo systemctl stop sddm");
+    if (stop_sddm_status == -1) {
+        perror("Failed to execute 'sudo systemctl stop sddm'");
+    } else if (WIFEXITED(stop_sddm_status)) {
+        if (WEXITSTATUS(stop_sddm_status) == 0) {
+            printf("Successfully stopped sddm service.\n");
+        } else {
+            fprintf(stderr, "Stopping sddm service exited with status %d.\n", WEXITSTATUS(stop_sddm_status));
+        }
+    } else if (WIFSIGNALED(stop_sddm_status)) {
+        fprintf(stderr, "Stopping sddm service terminated by signal %d.\n", WTERMSIG(stop_sddm_status));
+    } else {
+        fprintf(stderr, "Stopping sddm service returned unexpected status.\n");
+    }
+
+    setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", "3", 1);
+    setenv("QT_QPA_EGLFS_KMS_DEBUG", "1", 1);
+    setenv("QT_QPA_EGLFS_DEBUG", "1", 1);
+
     const char *drm_node = "/dev/dri/card0";
     const char *socket_path = "/tmp/drm-master";
     int clients = 2;
