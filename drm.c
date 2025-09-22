@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -14,6 +15,28 @@
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
 #include <assert.h>
+
+static int drm_prefixed_vfprintf(FILE *stream, const char *fmt, va_list args)
+{
+        const char *prefix = getenv("FPVUE_LOG_PREFIX");
+        int result = 0;
+        if (prefix && *prefix)
+                result += fputs(prefix, stream);
+        result += vfprintf(stream, fmt, args);
+        return result;
+}
+
+static int drm_prefixed_fprintf(FILE *stream, const char *fmt, ...)
+{
+        va_list args;
+        va_start(args, fmt);
+        int result = drm_prefixed_vfprintf(stream, fmt, args);
+        va_end(args);
+        return result;
+}
+
+#define fprintf(stream, fmt, ...) drm_prefixed_fprintf(stream, fmt, ##__VA_ARGS__)
+#define printf(fmt, ...) drm_prefixed_fprintf(stdout, fmt, ##__VA_ARGS__)
 
 static bool get_plane_type_value(int fd, uint32_t plane_id, uint64_t *type_out)
 {
@@ -247,7 +270,14 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
         drmModePlaneResPtr plane_res;
         bool found_plane = false;
         int best_priority = 3;
-        int i, ret = -EINVAL;
+        const char *forced_plane_env = getenv("FPVUE_FORCED_PLANE_ID");
+        int forced_plane_id = -1;
+        if (forced_plane_env && forced_plane_env[0] != '\0') {
+                forced_plane_id = atoi(forced_plane_env);
+                if (forced_plane_id <= 0)
+                        forced_plane_id = -1;
+        }
+        int i, ret = forced_plane_id > 0 ? -ENOENT : -EINVAL;
 
         plane_res = drmModeGetPlaneResources(fd);
         if (!plane_res) {
@@ -259,6 +289,8 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
         bool prefer_primary = (plane_format == DRM_FORMAT_ARGB8888);
         for (i = 0; i < plane_res->count_planes; i++) {
                 int plane_id = plane_res->planes[i];
+                if (forced_plane_id > 0 && plane_id != forced_plane_id)
+                        continue;
                 bool matches = false;
                 int priority = 2;
 
@@ -304,6 +336,9 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
         }
 
         drmModeFreePlaneResources(plane_res);
+
+        if (forced_plane_id > 0 && !found_plane)
+                fprintf(stderr, "Failed to locate forced plane %d for video\n", forced_plane_id);
 
         return ret;
 }

@@ -66,12 +66,23 @@ testing the display stack or sharing the DRM master with another application.
 It now also starts `qopenhd`, rendering the Qt UI on a higher z-position plane
 so the color cycle continues to be visible in the background. The host passes
 `--platform=eglfs` when launching `qopenhd` so it binds directly to the DRM
-overlay plane.
+overlay plane. `qopenhd` is launched first, and the fpvue color-cycle client is
+delayed by 60 seconds so the Qt interface can fully initialize before the
+secondary plane consumer comes online.
 
 Run the host:
 
 ```
 display_host 720p
+```
+
+Positional numeric arguments after the regular options set explicit plane IDs
+for the launched clients. The first ID is applied to the QOpenHD process and
+the second to the fpvue color-cycle client. For example, to force QOpenHD to
+plane `93` and fpvue to plane `105` run:
+
+```
+display_host 93 105
 ```
 
 `display_host` automatically injects the `libdrm_fd_preload.so` shim in front of

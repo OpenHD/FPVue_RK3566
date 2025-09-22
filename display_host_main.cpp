@@ -1,5 +1,6 @@
 #include "display_host.h"
 #include <ctype.h>
+#include <cstdarg>
 #include <fstream>
 #include <iterator>
 #include <limits.h>
@@ -12,6 +13,7 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#include <errno.h>
 
 #ifndef DEFAULT_PRELOAD_PATH
 #define DEFAULT_PRELOAD_PATH ""
@@ -143,6 +145,28 @@ static bool locate_library_in_ldconfig(const char *library_prefix, char *buffer,
 
     pclose(pipe);
     return found;
+}
+
+static constexpr const char kDisplayHostLogPrefix[] = "display_host: ";
+
+static void log_with_prefix(FILE *stream, const char *fmt, va_list args) {
+    fputs(kDisplayHostLogPrefix, stream);
+    vfprintf(stream, fmt, args);
+    fflush(stream);
+}
+
+static void log_info(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    log_with_prefix(stdout, fmt, args);
+    va_end(args);
+}
+
+static void log_error(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    log_with_prefix(stderr, fmt, args);
+    va_end(args);
 }
 
 static int build_preload_path(char *buffer, size_t size) {
@@ -277,20 +301,19 @@ static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
 int main(int argc, char **argv) {
     int stop_sddm_status = system("sudo systemctl stop sddm");
     if (stop_sddm_status == -1) {
-        perror("Failed to execute 'sudo systemctl stop sddm'");
+        log_error("Failed to execute 'sudo systemctl stop sddm': %s\n", strerror(errno));
     } else if (WIFEXITED(stop_sddm_status)) {
         if (WEXITSTATUS(stop_sddm_status) == 0) {
-            printf("Successfully stopped sddm service.\n");
+            log_info("Successfully stopped sddm service.\n");
         } else {
-            fprintf(stderr, "Stopping sddm service exited with status %d.\n", WEXITSTATUS(stop_sddm_status));
+            log_error("Stopping sddm service exited with status %d.\n", WEXITSTATUS(stop_sddm_status));
         }
     } else if (WIFSIGNALED(stop_sddm_status)) {
-        fprintf(stderr, "Stopping sddm service terminated by signal %d.\n", WTERMSIG(stop_sddm_status));
+        log_error("Stopping sddm service terminated by signal %d.\n", WTERMSIG(stop_sddm_status));
     } else {
-        fprintf(stderr, "Stopping sddm service returned unexpected status.\n");
+        log_error("Stopping sddm service returned unexpected status.\n");
     }
 
-    setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", "3", 1);
     setenv("QT_QPA_EGLFS_KMS_DEBUG", "1", 1);
     setenv("QT_QPA_EGLFS_DEBUG", "1", 1);
 
@@ -298,6 +321,7 @@ int main(int argc, char **argv) {
     const char *socket_path = "/tmp/drm-master";
     int clients = 2;
     uint16_t width = 0, height = 0;
+    std::vector<int> forced_planes;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "720p") == 0) {
@@ -313,42 +337,50 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--clients") == 0 && i + 1 < argc) {
             clients = atoi(argv[++i]);
         } else {
-            fprintf(stderr, "Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n]\n", argv[0]);
-            return 1;
+            char *end = nullptr;
+            long value = strtol(argv[i], &end, 10);
+            if (argv[i][0] != '\0' && end && *end == '\0') {
+                forced_planes.push_back(static_cast<int>(value));
+            } else {
+                log_error("Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n] [plane0 [plane1 ...]]\n", argv[0]);
+                return 1;
+            }
         }
     }
 
     if (clients < 2)
         clients = 2;
 
-    pid_t pid = fork();
-    if (pid == 0) {
-        sleep(1);
-        configure_shared_drm_environment(socket_path, drm_node);
-        setenv("FPVUE_COLOR_CYCLE_ZPOS", "0", 1);
-        execlp("fpvue", "fpvue", "--color-cycle", NULL);
-        perror("execlp fpvue");
-        return 1;
-    }
+    std::string qopenhd_plane = forced_planes.size() > 0 ? std::to_string(forced_planes[0]) : std::string("3");
+    std::string fpvue_plane = forced_planes.size() > 1 ? std::to_string(forced_planes[1]) : std::string("0");
 
-    int stdout_pipe[2] = {-1, -1};
-    int stderr_pipe[2] = {-1, -1};
-    bool capture_qopenhd_logs = pipe(stdout_pipe) == 0 && pipe(stderr_pipe) == 0;
+    int qopenhd_stdout_pipe[2] = {-1, -1};
+    int qopenhd_stderr_pipe[2] = {-1, -1};
+    bool capture_qopenhd_logs = pipe(qopenhd_stdout_pipe) == 0 && pipe(qopenhd_stderr_pipe) == 0;
     if (!capture_qopenhd_logs) {
-        if (stdout_pipe[0] >= 0) {
-            close(stdout_pipe[0]);
-            close(stdout_pipe[1]);
+        if (qopenhd_stdout_pipe[0] >= 0) {
+            close(qopenhd_stdout_pipe[0]);
+            close(qopenhd_stdout_pipe[1]);
         }
-        if (stderr_pipe[0] >= 0) {
-            close(stderr_pipe[0]);
-            close(stderr_pipe[1]);
+        if (qopenhd_stderr_pipe[0] >= 0) {
+            close(qopenhd_stderr_pipe[0]);
+            close(qopenhd_stderr_pipe[1]);
         }
     }
 
     pid_t qopenhd_pid = fork();
     if (qopenhd_pid == 0) {
         sleep(2);
+        if (capture_qopenhd_logs) {
+            close(qopenhd_stdout_pipe[0]);
+            close(qopenhd_stderr_pipe[0]);
+            dup2(qopenhd_stdout_pipe[1], STDOUT_FILENO);
+            dup2(qopenhd_stderr_pipe[1], STDERR_FILENO);
+            close(qopenhd_stdout_pipe[1]);
+            close(qopenhd_stderr_pipe[1]);
+        }
         configure_shared_drm_environment(socket_path, drm_node);
+        setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", qopenhd_plane.c_str(), 1);
         const char *current_platform = getenv("QT_QPA_PLATFORM");
         if (!current_platform || strcmp(current_platform, "eglfs") != 0)
             setenv("QT_QPA_PLATFORM", "eglfs", 1);
@@ -368,15 +400,6 @@ int main(int argc, char **argv) {
         const char *kms_atomic = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
         if (!kms_atomic || kms_atomic[0] == '\0')
             setenv("QT_QPA_EGLFS_KMS_ATOMIC", "1", 1);
-
-        if (capture_qopenhd_logs) {
-            close(stdout_pipe[0]);
-            close(stderr_pipe[0]);
-            dup2(stdout_pipe[1], STDOUT_FILENO);
-            dup2(stderr_pipe[1], STDERR_FILENO);
-            close(stdout_pipe[1]);
-            close(stderr_pipe[1]);
-        }
 
         setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
         ensure_preload_in_environment("QOpenHD");
@@ -402,43 +425,89 @@ int main(int argc, char **argv) {
                 drm_device ? drm_device : "(unset)");
         fflush(stderr);
         execlp("QOpenHD", "QOpenHD", "--platform=eglfs", NULL);
-        perror("execlp qopenhd");
+        fprintf(stderr, "Failed to launch QOpenHD: %s\n", strerror(errno));
         return 1;
     }
 
     if (capture_qopenhd_logs) {
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        pipe_output_to_stream(stdout_pipe[0], stdout, "[QOpenHD] ");
-        pipe_output_to_stream(stderr_pipe[0], stderr, "[QOpenHD] ");
+        close(qopenhd_stdout_pipe[1]);
+        close(qopenhd_stderr_pipe[1]);
+        pipe_output_to_stream(qopenhd_stdout_pipe[0], stdout, "qopenhd: ");
+        pipe_output_to_stream(qopenhd_stderr_pipe[0], stderr, "qopenhd: ");
     }
 
-    printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
-    if (width > 0 && height > 0) {
-        printf(", forcing mode %ux%u", width, height);
+    log_info("Delaying fpvue color cycle launch by 60 seconds to allow QOpenHD to initialize first.\n");
+
+    int fpvue_stdout_pipe[2] = {-1, -1};
+    int fpvue_stderr_pipe[2] = {-1, -1};
+    bool capture_fpvue_logs = pipe(fpvue_stdout_pipe) == 0 && pipe(fpvue_stderr_pipe) == 0;
+    if (!capture_fpvue_logs) {
+        if (fpvue_stdout_pipe[0] >= 0) {
+            close(fpvue_stdout_pipe[0]);
+            close(fpvue_stdout_pipe[1]);
+        }
+        if (fpvue_stderr_pipe[0] >= 0) {
+            close(fpvue_stderr_pipe[0]);
+            close(fpvue_stderr_pipe[1]);
+        }
     }
-    printf("\n");
-    printf("Launched fpvue color cycle client as PID %d.\n", pid);
-    printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
+
+    pid_t fpvue_pid = fork();
+    if (fpvue_pid == 0) {
+        sleep(60);
+        if (capture_fpvue_logs) {
+            close(fpvue_stdout_pipe[0]);
+            close(fpvue_stderr_pipe[0]);
+            dup2(fpvue_stdout_pipe[1], STDOUT_FILENO);
+            dup2(fpvue_stderr_pipe[1], STDERR_FILENO);
+            close(fpvue_stdout_pipe[1]);
+            close(fpvue_stderr_pipe[1]);
+        }
+        configure_shared_drm_environment(socket_path, drm_node);
+        setenv("FPVUE_COLOR_CYCLE_ZPOS", "0", 1);
+        setenv("FPVUE_FORCED_PLANE_ID", fpvue_plane.c_str(), 1);
+        execlp("fpvue", "fpvue", "--color-cycle", NULL);
+        fprintf(stderr, "Failed to launch fpvue color cycle: %s\n", strerror(errno));
+        return 1;
+    }
+
+    if (capture_fpvue_logs) {
+        close(fpvue_stdout_pipe[1]);
+        close(fpvue_stderr_pipe[1]);
+        pipe_output_to_stream(fpvue_stdout_pipe[0], stdout, "fpvue: ");
+        pipe_output_to_stream(fpvue_stderr_pipe[0], stderr, "fpvue: ");
+    }
+
+    setenv("FPVUE_LOG_PREFIX", kDisplayHostLogPrefix, 1);
+
+    if (width > 0 && height > 0) {
+        log_info("Starting display host with DRM node %s, socket %s, expecting %d clients and forcing mode %ux%u.\n",
+                 drm_node, socket_path, clients, width, height);
+    } else {
+        log_info("Starting display host with DRM node %s, socket %s, expecting %d clients.\n", drm_node, socket_path,
+                 clients);
+    }
+    log_info("Configured QOpenHD plane %s and launched client as PID %d.\n", qopenhd_plane.c_str(), qopenhd_pid);
+    log_info("Configured fpvue plane %s and launched color cycle client as PID %d.\n", fpvue_plane.c_str(), fpvue_pid);
     std::thread([qopenhd_pid]() {
         int status = 0;
         pid_t result = waitpid(qopenhd_pid, &status, 0);
         if (result > 0) {
             if (WIFEXITED(status)) {
-                fprintf(stderr, "QOpenHD exited with status %d.\n", WEXITSTATUS(status));
+                log_error("QOpenHD exited with status %d.\n", WEXITSTATUS(status));
             } else if (WIFSIGNALED(status)) {
-                fprintf(stderr, "QOpenHD terminated by signal %d.\n", WTERMSIG(status));
+                log_error("QOpenHD terminated by signal %d.\n", WTERMSIG(status));
             }
         }
     }).detach();
-    printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
+    log_info("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {
-        fprintf(stderr, "Failed to start display host\n");
+        log_error("Failed to start display host\n");
         return 1;
     }
-    printf("Display host running. DRM FD %d shared on %s\n", fd, socket_path);
+    log_info("Display host running. DRM FD %d shared on %s\n", fd, socket_path);
     while (1) {
         sleep(60);
     }
