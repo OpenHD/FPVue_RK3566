@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits.h>
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -285,13 +286,17 @@ static bool determine_active_crtc_index(int fd, uint32_t *crtc_index_out) {
     return false;
 }
 
-static bool find_overlay_plane_for_crtc(int fd, uint32_t crtc_index, uint32_t *plane_id_out) {
+struct PlaneSelection {
+    bool have_primary = false;
+    uint32_t primary_id = 0;
+    bool have_overlay = false;
+    uint32_t overlay_id = 0;
+};
+
+static bool gather_plane_selection_for_crtc(int fd, uint32_t crtc_index, PlaneSelection &selection) {
     drmModePlaneResPtr plane_res = drmModeGetPlaneResources(fd);
     if (!plane_res)
         return false;
-
-    bool found = false;
-    uint32_t plane_id = 0;
 
     for (uint32_t i = 0; i < plane_res->count_planes; ++i) {
         uint32_t candidate = plane_res->planes[i];
@@ -302,11 +307,14 @@ static bool find_overlay_plane_for_crtc(int fd, uint32_t crtc_index, uint32_t *p
         bool usable = (plane->possible_crtcs & (1u << crtc_index)) != 0 && plane_supports_argb8888(plane);
         if (usable) {
             uint64_t type = 0;
-            if (get_plane_type_value(fd, candidate, &type) && type == DRM_PLANE_TYPE_OVERLAY) {
-                plane_id = candidate;
-                found = true;
-                drmModeFreePlane(plane);
-                break;
+            if (get_plane_type_value(fd, candidate, &type)) {
+                if (type == DRM_PLANE_TYPE_PRIMARY && !selection.have_primary) {
+                    selection.have_primary = true;
+                    selection.primary_id = candidate;
+                } else if (type == DRM_PLANE_TYPE_OVERLAY && !selection.have_overlay) {
+                    selection.have_overlay = true;
+                    selection.overlay_id = candidate;
+                }
             }
         }
 
@@ -314,14 +322,10 @@ static bool find_overlay_plane_for_crtc(int fd, uint32_t crtc_index, uint32_t *p
     }
 
     drmModeFreePlaneResources(plane_res);
-
-    if (found && plane_id_out)
-        *plane_id_out = plane_id;
-
-    return found;
+    return selection.have_primary || selection.have_overlay;
 }
 
-static bool build_planes_for_crtc_value(const char *drm_node, std::string &value_out) {
+static bool build_planes_for_crtc_value(const char *drm_node, std::string &value_out, unsigned int *overlay_index_out) {
     if (!drm_node || drm_node[0] == '\0')
         return false;
 
@@ -341,8 +345,8 @@ static bool build_planes_for_crtc_value(const char *drm_node, std::string &value
         return false;
     }
 
-    uint32_t plane_id = 0;
-    if (!find_overlay_plane_for_crtc(fd, crtc_index, &plane_id)) {
+    PlaneSelection selection;
+    if (!gather_plane_selection_for_crtc(fd, crtc_index, selection) || !selection.have_overlay) {
         fprintf(stderr, "Failed to find overlay plane for CRTC %u on %s\n", crtc_index, drm_node);
         close(fd);
         return false;
@@ -350,11 +354,23 @@ static bool build_planes_for_crtc_value(const char *drm_node, std::string &value
 
     close(fd);
 
-    char buffer[64];
-    if (snprintf(buffer, sizeof(buffer), "%u:%u", crtc_index, plane_id) >= static_cast<int>(sizeof(buffer)))
-        return false;
+    std::vector<uint32_t> planes;
+    if (selection.have_primary)
+        planes.push_back(selection.primary_id);
+    planes.push_back(selection.overlay_id);
 
-    value_out.assign(buffer);
+    std::ostringstream oss;
+    oss << crtc_index << ":";
+    for (size_t i = 0; i < planes.size(); ++i) {
+        if (i > 0)
+            oss << ",";
+        oss << planes[i];
+    }
+
+    value_out = oss.str();
+    if (overlay_index_out) {
+        *overlay_index_out = selection.have_primary ? static_cast<unsigned int>(planes.size() - 1) : 0u;
+    }
     return true;
 }
 
@@ -524,21 +540,31 @@ int main(int argc, char **argv) {
 
         setenv("QT_QPA_EGLFS_KMS_ZPOS", "2", 1);
         const char *existing_planes = getenv("QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC");
+        bool plane_index_set = false;
         if (!existing_planes || existing_planes[0] == '\0') {
             const char *drm_device_path = getenv("FPVUE_DRM_DEVICE_PATH");
             if (!drm_device_path || drm_device_path[0] == '\0')
                 drm_device_path = drm_node;
 
             std::string planes_value;
-            if (build_planes_for_crtc_value(drm_device_path, planes_value)) {
+            unsigned int overlay_plane_index = 0;
+            if (build_planes_for_crtc_value(drm_device_path, planes_value, &overlay_plane_index)) {
                 setenv("QT_QPA_EGLFS_KMS_PLANES_FOR_CRTC", planes_value.c_str(), 1);
+                char plane_index_buffer[16];
+                snprintf(plane_index_buffer, sizeof(plane_index_buffer), "%u", overlay_plane_index);
+                setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", plane_index_buffer, 1);
+                plane_index_set = true;
             } else {
                 fprintf(stderr,
                         "Warning: Unable to determine overlay plane for QOpenHD on %s; using existing configuration\n",
                         drm_device_path);
             }
         }
-        setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", "0", 1);
+        if (!plane_index_set) {
+            const char *plane_index_env = getenv("QT_QPA_EGLFS_KMS_PLANE_INDEX");
+            if (!plane_index_env || plane_index_env[0] == '\0')
+                setenv("QT_QPA_EGLFS_KMS_PLANE_INDEX", "0", 1);
+        }
 
         const char *kms_config = getenv("QT_QPA_EGLFS_KMS_CONFIG");
         if (!kms_config || kms_config[0] == '\0') {
