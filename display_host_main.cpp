@@ -497,7 +497,7 @@ int main(int argc, char **argv) {
             std::string pipeline_command =
                 std::string("gst-launch-1.0 -q filesrc location=") + debug_sample_path +
                 " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1 ! queue ! omxh264dec ! "
-                "video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false | "
+                "videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false | "
                 "fpvue --screen-mode 1280x720@60 --stdin-nv12";
 
             execlp("sh", "sh", "-c", pipeline_command.c_str(), (char *)NULL);
