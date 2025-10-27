@@ -393,6 +393,7 @@ int main(int argc, char **argv) {
     const char *socket_path = "/tmp/drm-master";
     int clients = 2;
     uint16_t width = 0, height = 0;
+    bool debug_mode = false;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "720p") == 0) {
@@ -407,8 +408,10 @@ int main(int argc, char **argv) {
             drm_node = argv[++i];
         } else if (strcmp(argv[i], "--clients") == 0 && i + 1 < argc) {
             clients = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-debug") == 0 || strcmp(argv[i], "--debug") == 0) {
+            debug_mode = true;
         } else {
-            fprintf(stderr, "Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n] [-debug]\n", argv[0]);
             return 1;
         }
     }
@@ -440,94 +443,141 @@ int main(int argc, char **argv) {
 
     int stdout_pipe[2] = {-1, -1};
     int stderr_pipe[2] = {-1, -1};
-    bool capture_qopenhd_logs = pipe(stdout_pipe) == 0 && pipe(stderr_pipe) == 0;
-    if (!capture_qopenhd_logs) {
-        if (stdout_pipe[0] >= 0) {
-            close(stdout_pipe[0]);
-            close(stdout_pipe[1]);
-        }
-        if (stderr_pipe[0] >= 0) {
-            close(stderr_pipe[0]);
-            close(stderr_pipe[1]);
-        }
-    }
+    bool capture_qopenhd_logs = false;
+    pid_t overlay_pid = -1;
+    bool overlay_is_qopenhd = false;
 
-    pid_t qopenhd_pid = fork();
-    if (qopenhd_pid == 0) {
-        sleep(2);
-        configure_shared_drm_environment(socket_path, drm_node);
-        if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
-            char reserved_planes[32];
-            snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
-            setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
-            if (plane_assignment.overlay_plane_id != 0) {
-                char overlay_plane[32];
-                snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
-                setenv("FPVUE_OVERLAY_PLANE_ID", overlay_plane, 1);
+    if (!debug_mode) {
+        capture_qopenhd_logs = pipe(stdout_pipe) == 0 && pipe(stderr_pipe) == 0;
+        if (!capture_qopenhd_logs) {
+            if (stdout_pipe[0] >= 0) {
+                close(stdout_pipe[0]);
+                close(stdout_pipe[1]);
             }
-        }
-        const char *current_platform = getenv("QT_QPA_PLATFORM");
-        if (!current_platform || strcmp(current_platform, "eglfs") != 0)
-            setenv("QT_QPA_PLATFORM", "eglfs", 1);
-
-        const char *kms_config = getenv("QT_QPA_EGLFS_KMS_CONFIG");
-        if (!kms_config || kms_config[0] == '\0') {
-            const char *default_kms_config = "/root/kms.json";
-            if (access(default_kms_config, R_OK) == 0) {
-                setenv("QT_QPA_EGLFS_KMS_CONFIG", default_kms_config, 1);
-            } else {
-                fprintf(stderr,
-                        "Warning: default KMS config %s not accessible; QOpenHD may not bind to the expected plane\n",
-                        default_kms_config);
+            if (stderr_pipe[0] >= 0) {
+                close(stderr_pipe[0]);
+                close(stderr_pipe[1]);
             }
         }
 
-        const char *kms_atomic = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
-        if (!kms_atomic || kms_atomic[0] == '\0')
-            setenv("QT_QPA_EGLFS_KMS_ATOMIC", "1", 1);
+        pid_t qopenhd_pid = fork();
+        if (qopenhd_pid == 0) {
+            sleep(2);
+            configure_shared_drm_environment(socket_path, drm_node);
+            if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
+                char reserved_planes[32];
+                snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
+                setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
+                if (plane_assignment.overlay_plane_id != 0) {
+                    char overlay_plane[32];
+                    snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
+                    setenv("FPVUE_OVERLAY_PLANE_ID", overlay_plane, 1);
+                }
+            }
+            const char *current_platform = getenv("QT_QPA_PLATFORM");
+            if (!current_platform || strcmp(current_platform, "eglfs") != 0)
+                setenv("QT_QPA_PLATFORM", "eglfs", 1);
+
+            const char *kms_config = getenv("QT_QPA_EGLFS_KMS_CONFIG");
+            if (!kms_config || kms_config[0] == '\0') {
+                const char *default_kms_config = "/root/kms.json";
+                if (access(default_kms_config, R_OK) == 0) {
+                    setenv("QT_QPA_EGLFS_KMS_CONFIG", default_kms_config, 1);
+                } else {
+                    fprintf(stderr,
+                            "Warning: default KMS config %s not accessible; QOpenHD may not bind to the expected plane\n",
+                            default_kms_config);
+                }
+            }
+
+            const char *kms_atomic = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
+            if (!kms_atomic || kms_atomic[0] == '\0')
+                setenv("QT_QPA_EGLFS_KMS_ATOMIC", "1", 1);
+
+            if (capture_qopenhd_logs) {
+                close(stdout_pipe[0]);
+                close(stderr_pipe[0]);
+                dup2(stdout_pipe[1], STDOUT_FILENO);
+                dup2(stderr_pipe[1], STDERR_FILENO);
+                close(stdout_pipe[1]);
+                close(stderr_pipe[1]);
+            }
+
+            setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
+            ensure_preload_in_environment("QOpenHD");
+            const char *ld_preload = getenv("LD_PRELOAD");
+            const char *qt_platform_value = getenv("QT_QPA_PLATFORM");
+            const char *kms_value = getenv("QT_QPA_EGLFS_KMS_CONFIG");
+            const char *kms_atomic_value = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
+            const char *drm_socket = getenv("FPVUE_DRM_FD_SOCKET");
+            const char *drm_device = getenv("FPVUE_DRM_DEVICE_PATH");
+            fprintf(stderr,
+                    "Launching QOpenHD command: QOpenHD --platform=eglfs\n"
+                    "  QT_QPA_PLATFORM=%s\n"
+                    "  QT_QPA_EGLFS_KMS_CONFIG=%s\n"
+                    "  QT_QPA_EGLFS_KMS_ATOMIC=%s\n"
+                    "  LD_PRELOAD=%s\n"
+                    "  FPVUE_DRM_FD_SOCKET=%s\n"
+                    "  FPVUE_DRM_DEVICE_PATH=%s\n",
+                    qt_platform_value ? qt_platform_value : "(unset)",
+                    kms_value ? kms_value : "(unset)",
+                    kms_atomic_value ? kms_atomic_value : "(unset)",
+                    ld_preload ? ld_preload : "(unset)",
+                    drm_socket ? drm_socket : "(unset)",
+                    drm_device ? drm_device : "(unset)");
+            fflush(stderr);
+            execlp("QOpenHD", "QOpenHD", "--platform=eglfs", NULL);
+            perror("execlp qopenhd");
+            return 1;
+        }
+
+        overlay_pid = qopenhd_pid;
+        overlay_is_qopenhd = true;
 
         if (capture_qopenhd_logs) {
-            close(stdout_pipe[0]);
-            close(stderr_pipe[0]);
-            dup2(stdout_pipe[1], STDOUT_FILENO);
-            dup2(stderr_pipe[1], STDERR_FILENO);
             close(stdout_pipe[1]);
             close(stderr_pipe[1]);
+            pipe_output_to_stream(stdout_pipe[0], stdout, "[QOpenHD] ");
+            pipe_output_to_stream(stderr_pipe[0], stderr, "[QOpenHD] ");
         }
+    } else {
+        pid_t debug_pid = fork();
+        if (debug_pid == 0) {
+            sleep(2);
+            configure_shared_drm_environment(socket_path, drm_node);
+            setenv("FPVUE_COLOR_CYCLE_ZPOS", "1", 1);
+            if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
+                char reserved_planes[32];
+                snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
+                setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
+            }
+            if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
+                char overlay_plane[32];
+                snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
+                setenv("FPVUE_COLOR_CYCLE_PLANE_ID", overlay_plane, 1);
+            }
+            setenv("FPVUE_COLOR_CYCLE_PLANE_TYPE", "overlay", 1);
 
-        setenv("QT_LOGGING_TO_CONSOLE", "1", 1);
-        ensure_preload_in_environment("QOpenHD");
-        const char *ld_preload = getenv("LD_PRELOAD");
-        const char *qt_platform_value = getenv("QT_QPA_PLATFORM");
-        const char *kms_value = getenv("QT_QPA_EGLFS_KMS_CONFIG");
-        const char *kms_atomic_value = getenv("QT_QPA_EGLFS_KMS_ATOMIC");
-        const char *drm_socket = getenv("FPVUE_DRM_FD_SOCKET");
-        const char *drm_device = getenv("FPVUE_DRM_DEVICE_PATH");
-        fprintf(stderr,
-                "Launching QOpenHD command: QOpenHD --platform=eglfs\n"
-                "  QT_QPA_PLATFORM=%s\n"
-                "  QT_QPA_EGLFS_KMS_CONFIG=%s\n"
-                "  QT_QPA_EGLFS_KMS_ATOMIC=%s\n"
-                "  LD_PRELOAD=%s\n"
-                "  FPVUE_DRM_FD_SOCKET=%s\n"
-                "  FPVUE_DRM_DEVICE_PATH=%s\n",
-                qt_platform_value ? qt_platform_value : "(unset)",
-                kms_value ? kms_value : "(unset)",
-                kms_atomic_value ? kms_atomic_value : "(unset)",
-                ld_preload ? ld_preload : "(unset)",
-                drm_socket ? drm_socket : "(unset)",
-                drm_device ? drm_device : "(unset)");
-        fflush(stderr);
-        execlp("QOpenHD", "QOpenHD", "--platform=eglfs", NULL);
-        perror("execlp qopenhd");
-        return 1;
-    }
+            char overlay_width[16];
+            char overlay_height[16];
+            char overlay_x[16];
+            char overlay_y[16];
+            snprintf(overlay_width, sizeof(overlay_width), "%d", 640);
+            snprintf(overlay_height, sizeof(overlay_height), "%d", 360);
+            snprintf(overlay_x, sizeof(overlay_x), "%d", 100);
+            snprintf(overlay_y, sizeof(overlay_y), "%d", 100);
+            setenv("FPVUE_COLOR_CYCLE_BUFFER_WIDTH", overlay_width, 0);
+            setenv("FPVUE_COLOR_CYCLE_BUFFER_HEIGHT", overlay_height, 0);
+            setenv("FPVUE_COLOR_CYCLE_CRTC_WIDTH", overlay_width, 0);
+            setenv("FPVUE_COLOR_CYCLE_CRTC_HEIGHT", overlay_height, 0);
+            setenv("FPVUE_COLOR_CYCLE_CRTC_X", overlay_x, 0);
+            setenv("FPVUE_COLOR_CYCLE_CRTC_Y", overlay_y, 0);
 
-    if (capture_qopenhd_logs) {
-        close(stdout_pipe[1]);
-        close(stderr_pipe[1]);
-        pipe_output_to_stream(stdout_pipe[0], stdout, "[QOpenHD] ");
-        pipe_output_to_stream(stderr_pipe[0], stderr, "[QOpenHD] ");
+            execlp("fpvue", "fpvue", "--color-cycle", NULL);
+            perror("execlp fpvue debug overlay");
+            return 1;
+        }
+        overlay_pid = debug_pid;
     }
 
     printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
@@ -538,27 +588,58 @@ int main(int argc, char **argv) {
     printf("Launched fpvue color cycle client as PID %d.\n", pid);
     if (have_plane_assignment) {
         printf("Reserved primary plane %u for fpvue.\n", plane_assignment.primary_plane_id);
-        if (plane_assignment.overlay_plane_id != 0) {
-            printf("Launched QOpenHD client as PID %d with overlay plane %u available.\n", qopenhd_pid,
-                   plane_assignment.overlay_plane_id);
-        } else {
-            printf("Launched QOpenHD client as PID %d with overlay plane discovery unavailable.\n", qopenhd_pid);
-        }
-    } else {
-        printf("Launched QOpenHD client as PID %d using overlay plane.\n", qopenhd_pid);
     }
-    std::thread([qopenhd_pid]() {
-        int status = 0;
-        pid_t result = waitpid(qopenhd_pid, &status, 0);
-        if (result > 0) {
-            if (WIFEXITED(status)) {
-                fprintf(stderr, "QOpenHD exited with status %d.\n", WEXITSTATUS(status));
-            } else if (WIFSIGNALED(status)) {
-                fprintf(stderr, "QOpenHD terminated by signal %d.\n", WTERMSIG(status));
+    if (overlay_pid > 0) {
+        if (overlay_is_qopenhd) {
+            if (have_plane_assignment) {
+                if (plane_assignment.overlay_plane_id != 0) {
+                    printf("Launched QOpenHD client as PID %d with overlay plane %u available.\n", overlay_pid,
+                           plane_assignment.overlay_plane_id);
+                } else {
+                    printf("Launched QOpenHD client as PID %d with overlay plane discovery unavailable.\n", overlay_pid);
+                }
+            } else {
+                printf("Launched QOpenHD client as PID %d using overlay plane.\n", overlay_pid);
+            }
+        } else {
+            if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
+                printf("Launched debug color cycle overlay as PID %d on plane %u.\n", overlay_pid,
+                       plane_assignment.overlay_plane_id);
+            } else {
+                printf("Launched debug color cycle overlay as PID %d without detected overlay plane.\n", overlay_pid);
             }
         }
-    }).detach();
-    printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
+    } else if (debug_mode) {
+        printf("Debug overlay color cycle launch failed; see logs for details.\n");
+    }
+
+    if (overlay_pid > 0) {
+        std::thread([overlay_pid, overlay_is_qopenhd]() {
+            int status = 0;
+            pid_t result = waitpid(overlay_pid, &status, 0);
+            if (result > 0) {
+                if (WIFEXITED(status)) {
+                    if (overlay_is_qopenhd) {
+                        fprintf(stderr, "QOpenHD exited with status %d.\n", WEXITSTATUS(status));
+                    } else {
+                        fprintf(stderr, "Debug color cycle overlay exited with status %d.\n", WEXITSTATUS(status));
+                    }
+                } else if (WIFSIGNALED(status)) {
+                    if (overlay_is_qopenhd) {
+                        fprintf(stderr, "QOpenHD terminated by signal %d.\n", WTERMSIG(status));
+                    } else {
+                        fprintf(stderr, "Debug color cycle overlay terminated by signal %d.\n", WTERMSIG(status));
+                    }
+                }
+            }
+        }).detach();
+    }
+
+    if (overlay_is_qopenhd) {
+        printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
+    } else if (debug_mode) {
+        printf("Display helper debug mode launched dual color cycle clients for DRM testing.\n");
+    }
 
     int fd = start_display_host(drm_node, socket_path, clients, width, height);
     if (fd < 0) {

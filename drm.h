@@ -58,8 +58,10 @@ struct modeset_output {
 	drmModeModeInfo mode;
 	uint32_t mode_blob_id;
 	uint32_t crtc_index;
-	int video_crtc_width;
-	int video_crtc_height;
+        int video_crtc_width;
+        int video_crtc_height;
+        int video_crtc_x;
+        int video_crtc_y;
 
         // Video variables
         drmModeAtomicReq *video_request;
