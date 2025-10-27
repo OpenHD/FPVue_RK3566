@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <sstream>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <thread>
@@ -494,11 +495,22 @@ int main(int argc, char **argv) {
                 setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
             }
 
-            std::string pipeline_command =
-                std::string("gst-launch-1.0 -q filesrc location=") + debug_sample_path +
-                " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1 ! queue ! omxh264dec ! "
-                "videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false | "
-                "fpvue --screen-mode 1280x720@60 --stdin-nv12";
+            // Attempt to use platform-specific hardware decoders first and fall back to a
+            // software decoder if negotiation keeps failing.
+            std::ostringstream pipeline_builder;
+            pipeline_builder << "run_decoder() {\n"
+                              << "    decoder=\"$1\";\n"
+                              << "    echo \"Attempting debug decode with $decoder\" >&2;\n"
+                              << "    gst-launch-1.0 -q filesrc location=" << debug_sample_path
+                              << " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1"
+                              << " ! video/x-h264,stream-format=byte-stream,alignment=au ! queue ! \"$decoder\""
+                              << " ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false;\n"
+                              << "}\n"
+                              << "(run_decoder omxh264dec || run_decoder mppvideodec || run_decoder avdec_h264)";
+
+            std::string pipeline_command = "(";
+            pipeline_command += pipeline_builder.str();
+            pipeline_command += ") | fpvue --screen-mode 1280x720@60 --stdin-nv12";
 
             execlp("sh", "sh", "-c", pipeline_command.c_str(), (char *)NULL);
             perror("execlp sample video pipeline");
