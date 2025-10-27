@@ -589,7 +589,11 @@ void *__DISPLAY_THREAD__(void *param)
             ret = set_drm_object_property(output_list->video_request, &output_list->video_plane, "FB_ID", fb_id);
             assert(ret>0);
 
-            drmModeAtomicCommit(drm_fd, output_list->video_request, DRM_MODE_ATOMIC_NONBLOCK |  DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+            int commit_flags = 0;
+            ret = drmModeAtomicCommit(drm_fd, output_list->video_request, commit_flags, NULL);
+            if (ret < 0) {
+                fprintf(stderr, "drmModeAtomicCommit failed for plane %u: %m\n", output_list->video_plane.id);
+            }
         }else if(develop_rendering_mode==1){
             static bool logged_once=false;
             if(!logged_once){
@@ -1667,9 +1671,9 @@ int main(int argc, char **argv)
 
     //read_rtp_stream(listen_port, packet, nal_buffer);
     if(udp_port==-1){
-        read_filesrc_stream((void**)packet);
+        read_filesrc_stream(&packet);
     }else{
-        read_gstreamerpipe_stream((void**)packet);
+        read_gstreamerpipe_stream(&packet);
     }
 
     ////////////////////////////////////////////// MPI CLEANUP

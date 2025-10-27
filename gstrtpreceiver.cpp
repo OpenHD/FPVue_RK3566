@@ -39,9 +39,8 @@ namespace pipeline{
         return "";
     }
     static std::string create_parse_for_codec(const VideoCodec& codec){
-        // config-interval=-1 = makes 100% sure each keyframe has SPS and PPS
-        if(codec==VideoCodec::H264)return "h264parse config-interval=-1 ! ";
-        if(codec==VideoCodec::H265)return "h265parse config-interval=-1  ! ";
+        if(codec==VideoCodec::H264)return "h264parse config-interval=1 ! ";
+        if(codec==VideoCodec::H265)return "h265parse config-interval=1 ! ";
         if(codec==VideoCodec::MJPEG)return "jpegparse ! ";
         assert(false);
         return "";
@@ -50,15 +49,13 @@ namespace pipeline{
         if(codec==VideoCodec::H264){
             std::stringstream ss;
             ss<<"video/x-h264";
-            ss<<", stream-format=\"byte-stream\",alignment=nal";
-            //ss<<", alignment=\"nal\"";
+            ss<<", stream-format=\"byte-stream\",alignment=au";
             ss<<" ! ";
             return ss.str();
         }else if(codec==VideoCodec::H265){
             std::stringstream ss;
             ss<<"video/x-h265";
-            ss<<", stream-format=\"byte-stream\"";
-            //ss<<", alignment=\"nal\"";
+            ss<<", stream-format=\"byte-stream\",alignment=au";
             ss<<" ! ";
             return ss.str();
         }else{
@@ -136,7 +133,7 @@ std::string GstRtpReceiver::construct_gstreamer_pipeline()
     ss<<pipeline::create_rtp_depacketize_for_codec(codec);
     ss<<pipeline::create_parse_for_codec(codec);
     ss<<pipeline::create_out_caps(codec);
-    ss<<" appsink drop=true name=out_appsink";
+    ss<<"queue ! appsink drop=true name=out_appsink";
     return ss.str();
 }
 
