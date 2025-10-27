@@ -442,13 +442,13 @@ static std::string build_sample_video_pipeline_command(const char *debug_sample_
                      << "    gst-launch-1.0 -q filesrc location=" << debug_sample_path
                      << " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1"
                      << " ! video/x-h264,stream-format=byte-stream,alignment=au ! queue ! \"$decoder\""
-                     << " ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false;\n"
+                     << " ! videoconvert ! video/x-raw,format=NV21,width=1280,height=720 ! queue ! fdsink fd=1 sync=false;\n"
                      << "}\n"
                      << "(run_decoder omxh264dec || run_decoder mppvideodec || run_decoder avdec_h264)";
 
     std::string pipeline_command = "(";
     pipeline_command += pipeline_builder.str();
-    pipeline_command += ") | fpvue --screen-mode 1280x720@60 --stdin-nv12";
+    pipeline_command += ") | fpvue --screen-mode 1280x720@60 --stdin-nv21";
     return pipeline_command;
 }
 
@@ -534,6 +534,7 @@ int main(int argc, char **argv) {
                 char primary_plane[32];
                 snprintf(primary_plane, sizeof(primary_plane), "%u", plane_assignment.primary_plane_id);
                 setenv("FPVUE_STDIN_NV12_PLANE_ID", primary_plane, 1);
+                setenv("FPVUE_STDIN_NV21_PLANE_ID", primary_plane, 1);
             }
 
             // Attempt to use platform-specific hardware decoders first and fall back to a
@@ -706,7 +707,9 @@ int main(int argc, char **argv) {
             sleep(3);
             configure_shared_drm_environment(socket_path, drm_node);
             setenv("FPVUE_STDIN_NV12_PLANE_TYPE", "overlay", 1);
+            setenv("FPVUE_STDIN_NV21_PLANE_TYPE", "overlay", 1);
             setenv("FPVUE_STDIN_NV12_ZPOS", "1", 1);
+            setenv("FPVUE_STDIN_NV21_ZPOS", "1", 1);
             if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
                 char reserved_planes[32];
                 snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
@@ -716,6 +719,7 @@ int main(int argc, char **argv) {
                 char overlay_plane[32];
                 snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
                 setenv("FPVUE_STDIN_NV12_PLANE_ID", overlay_plane, 1);
+                setenv("FPVUE_STDIN_NV21_PLANE_ID", overlay_plane, 1);
             }
 
             char overlay_width[16];
@@ -727,9 +731,13 @@ int main(int argc, char **argv) {
             snprintf(overlay_x, sizeof(overlay_x), "%d", 100);
             snprintf(overlay_y, sizeof(overlay_y), "%d", 100);
             setenv("FPVUE_STDIN_NV12_CRTC_WIDTH", overlay_width, 1);
+            setenv("FPVUE_STDIN_NV21_CRTC_WIDTH", overlay_width, 1);
             setenv("FPVUE_STDIN_NV12_CRTC_HEIGHT", overlay_height, 1);
+            setenv("FPVUE_STDIN_NV21_CRTC_HEIGHT", overlay_height, 1);
             setenv("FPVUE_STDIN_NV12_CRTC_X", overlay_x, 1);
+            setenv("FPVUE_STDIN_NV21_CRTC_X", overlay_x, 1);
             setenv("FPVUE_STDIN_NV12_CRTC_Y", overlay_y, 1);
+            setenv("FPVUE_STDIN_NV21_CRTC_Y", overlay_y, 1);
 
             std::string pipeline_command = build_sample_video_pipeline_command(debug_sample_path);
             fprintf(stderr, "Launching debug dual video overlay pipeline command:\n%s\n", pipeline_command.c_str());

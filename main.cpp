@@ -1008,6 +1008,7 @@ void printHelp() {
     "    --cedar            - force Cedar hardware decode fallback path\n"
     "\n"
     "    --stdin-nv12        - display raw NV12 frames from stdin\n"
+    "    --stdin-nv21        - display raw NV21 frames from stdin\n"
     "\n"
     "    --color-cycle      - display green, red and blue test screen\n"
     "\n"
@@ -1082,7 +1083,18 @@ bool x20_auto=false;
 bool aw_display=false;
 bool color_cycle=false;
 bool force_cedar=false;
-bool stdin_nv12_mode=false;
+
+struct NvStdinConfig {
+    const char *flag;
+    const char *mode_name;
+    uint32_t drm_format;
+    const char *env_prefix;
+};
+
+static const NvStdinConfig kNv12Config{"--stdin-nv12", "NV12", DRM_FORMAT_NV12, "FPVUE_STDIN_NV12"};
+static const NvStdinConfig kNv21Config{"--stdin-nv21", "NV21", DRM_FORMAT_NV21, "FPVUE_STDIN_NV21"};
+
+static const NvStdinConfig *stdin_nv_mode = nullptr;
 
 static bool read_env_uint32(const char *name, uint32_t &value) {
     const char *env = getenv(name);
@@ -1154,33 +1166,44 @@ static bool select_plane_for_output(int fd,
 // main
 
 
-int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
+int run_stdin_nv_mode(const std::vector<ScreenMode> &modes, const NvStdinConfig &config) {
     if (modes.empty()) {
-        fprintf(stderr, "stdin NV12 mode requires at least one screen mode candidate.\n");
+        fprintf(stderr, "stdin %s mode requires at least one screen mode candidate.\n", config.mode_name);
         return 1;
     }
 
+    auto env_name = [&config](const char *suffix) {
+        return std::string(config.env_prefix) + suffix;
+    };
+
     enum modeset_plane_type plane_type = MODESET_PLANE_TYPE_PRIMARY;
-    const char *plane_type_env = getenv("FPVUE_STDIN_NV12_PLANE_TYPE");
+    const std::string plane_type_env_name = env_name("_PLANE_TYPE");
+    const char *plane_type_env = getenv(plane_type_env_name.c_str());
     if (plane_type_env && strcmp(plane_type_env, "overlay") == 0) {
         plane_type = MODESET_PLANE_TYPE_OVERLAY;
     }
 
     uint32_t requested_plane_id = 0;
-    bool have_plane_request = read_env_uint32("FPVUE_STDIN_NV12_PLANE_ID", requested_plane_id);
+    const std::string plane_id_env_name = env_name("_PLANE_ID");
+    bool have_plane_request = read_env_uint32(plane_id_env_name.c_str(), requested_plane_id);
 
     uint32_t dst_width_override = 0;
     uint32_t dst_height_override = 0;
-    bool have_dst_width = read_env_uint32("FPVUE_STDIN_NV12_CRTC_WIDTH", dst_width_override);
-    bool have_dst_height = read_env_uint32("FPVUE_STDIN_NV12_CRTC_HEIGHT", dst_height_override);
+    const std::string dst_width_env_name = env_name("_CRTC_WIDTH");
+    const std::string dst_height_env_name = env_name("_CRTC_HEIGHT");
+    bool have_dst_width = read_env_uint32(dst_width_env_name.c_str(), dst_width_override);
+    bool have_dst_height = read_env_uint32(dst_height_env_name.c_str(), dst_height_override);
 
     int dst_x_override = 0;
     int dst_y_override = 0;
-    bool have_dst_x = read_env_int("FPVUE_STDIN_NV12_CRTC_X", dst_x_override);
-    bool have_dst_y = read_env_int("FPVUE_STDIN_NV12_CRTC_Y", dst_y_override);
+    const std::string dst_x_env_name = env_name("_CRTC_X");
+    const std::string dst_y_env_name = env_name("_CRTC_Y");
+    bool have_dst_x = read_env_int(dst_x_env_name.c_str(), dst_x_override);
+    bool have_dst_y = read_env_int(dst_y_env_name.c_str(), dst_y_override);
 
     int plane_zpos = 0;
-    read_env_int("FPVUE_STDIN_NV12_ZPOS", plane_zpos);
+    const std::string zpos_env_name = env_name("_ZPOS");
+    read_env_int(zpos_env_name.c_str(), plane_zpos);
 
     const char *fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
     int drm_fd = -1;
@@ -1194,14 +1217,14 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
 
     if (drm_fd < 0) {
         if (modeset_open(&drm_fd, "/dev/dri/card0") < 0) {
-            fprintf(stderr, "Unable to open DRM node for stdin NV12 mode.\n");
+            fprintf(stderr, "Unable to open DRM node for stdin %s mode.\n", config.mode_name);
             return 1;
         }
     }
 
     struct modeset_output *out = nullptr;
 
-    struct RawNv12Buffer {
+    struct RawNvBuffer {
         uint32_t fb_id{0};
         uint32_t handle{0};
         void *map{nullptr};
@@ -1209,8 +1232,8 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         uint32_t pitch{0};
     };
 
-    std::vector<RawNv12Buffer> buffers;
-    auto destroy_buffer = [&](RawNv12Buffer &buf) {
+    std::vector<RawNvBuffer> buffers;
+    auto destroy_buffer = [&](RawNvBuffer &buf) {
         if (buf.map && buf.map != MAP_FAILED) {
             munmap(buf.map, buf.size);
             buf.map = nullptr;
@@ -1240,7 +1263,7 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
 
     ScreenMode selected_mode = modes.front();
     if (modes.size() > 1) {
-        printf("Trying %zu screen mode candidates for stdin NV12 input.\n", modes.size());
+        printf("Trying %zu screen mode candidates for stdin %s input.\n", modes.size(), config.mode_name);
     }
     for (size_t idx = 0; idx < modes.size(); ++idx) {
         const ScreenMode &candidate = modes[idx];
@@ -1255,14 +1278,15 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
                             candidate.width,
                             candidate.height,
                             candidate.vrefresh,
-                            DRM_FORMAT_NV12,
+                            config.drm_format,
                             plane_type) == 0) {
             bool usable_candidate = true;
             if (have_plane_request && requested_plane_id != 0 &&
-                !select_plane_for_output(drm_fd, candidate_out, requested_plane_id, DRM_FORMAT_NV12)) {
+                !select_plane_for_output(drm_fd, candidate_out, requested_plane_id, config.drm_format)) {
                 fprintf(stderr,
-                        "Failed to select requested plane %u for stdin NV12 mode; trying next candidate.\n",
-                        requested_plane_id);
+                        "Failed to select requested plane %u for stdin %s mode; trying next candidate.\n",
+                        requested_plane_id,
+                        config.mode_name);
                 usable_candidate = false;
             }
             if (usable_candidate) {
@@ -1274,7 +1298,8 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         }
 
         fprintf(stderr,
-                "Failed to prepare DRM output for stdin NV12 mode using %ux%u@%u%s\n",
+                "Failed to prepare DRM output for stdin %s mode using %ux%u@%u%s\n",
+                config.mode_name,
                 candidate.width,
                 candidate.height,
                 candidate.vrefresh,
@@ -1287,7 +1312,7 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
     }
 
     if (!prepared) {
-        fprintf(stderr, "Unable to configure any of the requested screen modes for stdin NV12 input.\n");
+        fprintf(stderr, "Unable to configure any of the requested screen modes for stdin %s input.\n", config.mode_name);
         exit_code = 1;
         goto finish;
     }
@@ -1325,7 +1350,8 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
     frame_height = out->video_frm_height ? out->video_frm_height : selected_mode.height;
     if (frame_width == 0 || frame_height == 0) {
         fprintf(stderr,
-                "Invalid frame dimensions for stdin NV12 mode (%ux%u).\n",
+                "Invalid frame dimensions for stdin %s mode (%ux%u).\n",
+                config.mode_name,
                 frame_width,
                 frame_height);
         exit_code = 1;
@@ -1333,9 +1359,9 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
     }
 
     frame_size = static_cast<size_t>(frame_width) * frame_height * 3 / 2;
-    printf("Rendering raw NV12 stream %ux%u@%u from stdin.\n", frame_width, frame_height, selected_mode.vrefresh);
+    printf("Rendering raw %s stream %ux%u@%u from stdin.\n", config.mode_name, frame_width, frame_height, selected_mode.vrefresh);
 
-    buffers.assign(3, RawNv12Buffer{});
+    buffers.assign(3, RawNvBuffer{});
     for (auto &buf : buffers) {
         struct drm_mode_create_dumb create{};
         create.width = frame_width;
@@ -1357,7 +1383,7 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
             drmModeAddFB2(drm_fd,
                           frame_width,
                           frame_height,
-                          DRM_FORMAT_NV12,
+                          config.drm_format,
                           handles,
                           pitches,
                           offsets,
@@ -1398,13 +1424,13 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
                                  frame_width,
                                  frame_height,
                                  plane_zpos) != 0) {
-        fprintf(stderr, "Failed to submit initial frame for stdin NV12 mode.\n");
+        fprintf(stderr, "Failed to submit initial frame for stdin %s mode.\n", config.mode_name);
         exit_code = 1;
         goto finish;
     }
 
     while (!signal_flag && !eof) {
-        RawNv12Buffer &buf = buffers[buffer_index];
+        RawNvBuffer &buf = buffers[buffer_index];
         uint8_t *dst = static_cast<uint8_t *>(buf.map);
         size_t remaining = frame_size;
         size_t offset = 0;
@@ -1430,7 +1456,10 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         }
         if (!encoded_input_warning_emitted && looks_like_annexb_stream(dst, frame_size)) {
             fprintf(stderr,
-                    "Input appears to contain Annex B encoded video (e.g. H.264/H.265). --stdin-nv12 expects raw NV12 frames. Ensure your pipeline decodes the stream before piping it into fpvue (for example, add '... ! decodebin ! videoconvert ! video/x-raw,format=NV12 ! fdsink fd=1').\n");
+                    "Input appears to contain Annex B encoded video (e.g. H.264/H.265). %s expects raw %s frames. Ensure your pipeline decodes the stream before piping it into fpvue (for example, add '... ! decodebin ! videoconvert ! video/x-raw,format=%s ! fdsink fd=1').\n",
+                    config.flag,
+                    config.mode_name,
+                    config.mode_name);
             encoded_input_warning_emitted = true;
         }
         extra_modeset_set_fb(drm_fd, out, &out->video_plane, buf.fb_id);
@@ -1693,7 +1722,11 @@ int main(int argc, char **argv)
         continue;
     }
     __OnArgument("--stdin-nv12") {
-        stdin_nv12_mode=true;
+        stdin_nv_mode = &kNv12Config;
+        continue;
+    }
+    __OnArgument("--stdin-nv21") {
+        stdin_nv_mode = &kNv21Config;
         continue;
     }
     __OnArgument("--color-cycle") {
@@ -1741,7 +1774,7 @@ int main(int argc, char **argv)
 #if HAVE_ROCKCHIP
     // H264 or H265
     MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
-    if (!stdin_nv12_mode) {
+    if (!stdin_nv_mode) {
         if(decode_h265){
             printf("Decoding h265\n");
             mpp_type = MPP_VIDEO_CodingHEVC;
@@ -1753,16 +1786,16 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGPIPE, sig_handler);
     printf("Rendering mode %d\n",develop_rendering_mode);
-    if(stdin_nv12_mode){
+    if(stdin_nv_mode){
         if (udp_port != -1) {
-            fprintf(stderr, "--stdin-nv12 ignores UDP input; reading from stdin.\n");
+            fprintf(stderr, "%s ignores UDP input; reading from stdin.\n", stdin_nv_mode->flag);
             udp_port = -1;
         }
         if (aw_display) {
-            fprintf(stderr, "--stdin-nv12 overrides --aw-display Cedar path.\n");
+            fprintf(stderr, "%s overrides --aw-display Cedar path.\n", stdin_nv_mode->flag);
             aw_display = false;
         }
-        return run_stdin_nv12(screen_modes);
+        return run_stdin_nv_mode(screen_modes, *stdin_nv_mode);
     }
     if(color_cycle){
         return run_color_cycle(mode_width,mode_height,mode_vrefresh);
