@@ -175,7 +175,7 @@ bool AllwinnerV4L2Display::setup_drm() {
                       m_display_width,
                       m_display_height,
                       m_display_vrefresh,
-                      DRM_FORMAT_NV12,
+                      DRM_FORMAT_NV21,
                       MODESET_PLANE_TYPE_PRIMARY) < 0) {
     std::cerr << "modeset_prepare failed" << std::endl;
     return false;
@@ -240,7 +240,7 @@ bool AllwinnerV4L2Display::ensure_display_buffers(uint32_t width, uint32_t heigh
   recycle_display_buffers();
 
   debug_log("cedar", "Allocating ", kDisplayBufferCount,
-            " DRM NV12 buffers for ", width, "x", height);
+            " DRM NV21 buffers for ", width, "x", height);
 
   m_drm_buffers.resize(kDisplayBufferCount);
   uint32_t stride = width;
@@ -272,7 +272,7 @@ bool AllwinnerV4L2Display::ensure_display_buffers(uint32_t width, uint32_t heigh
     if (drmModeAddFB2(m_drm_fd,
                       width,
                       height,
-                      DRM_FORMAT_NV12,
+                      DRM_FORMAT_NV21,
                       handles,
                       pitches,
                       offsets,
@@ -575,7 +575,7 @@ void AllwinnerV4L2Display::teardown_omx() {
   m_decoder_state = OMX_StateLoaded;
 }
 
-static void copy_planar_to_nv12(uint8_t* dst,
+static void copy_planar_to_nv21(uint8_t* dst,
                                 uint32_t dst_stride,
                                 uint32_t dst_uv_stride,
                                 const uint8_t* src,
@@ -595,8 +595,8 @@ static void copy_planar_to_nv12(uint8_t* dst,
     const uint8_t* u_row = src_u + row * (width / 2);
     const uint8_t* v_row = src_v + row * (width / 2);
     for (uint32_t col = 0; col < width / 2; ++col) {
-      dst_row[2 * col] = u_row[col];
-      dst_row[2 * col + 1] = v_row[col];
+      dst_row[2 * col] = v_row[col];
+      dst_row[2 * col + 1] = u_row[col];
     }
   }
 }
@@ -725,7 +725,7 @@ void AllwinnerV4L2Display::decode_loop() {
     } else if (output_buffer->nFilledLen > 0) {
       auto& drm_buf = m_drm_buffers[m_drm_buffer_index];
       uint8_t* dst = static_cast<uint8_t*>(drm_buf.map);
-      copy_planar_to_nv12(dst,
+      copy_planar_to_nv21(dst,
                           m_display_stride,
                           m_display_stride,
                           output_buffer->pBuffer + output_buffer->nOffset,
