@@ -23,6 +23,7 @@
 #include <sys/uio.h>
 #include <sys/mman.h>
 #include <string>
+#include <vector>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -953,6 +954,8 @@ void printHelp() {
     "\n"
     "    --cedar            - force Cedar hardware decode fallback path\n"
     "\n"
+    "    --stdin-nv12        - display raw NV12 frames from stdin\n"
+    "\n"
     "    --color-cycle      - display green, red and blue test screen\n"
     "\n"
     "    --rmode      - different rendering modes for development \n"
@@ -1026,6 +1029,7 @@ bool x20_auto=false;
 bool aw_display=false;
 bool color_cycle=false;
 bool force_cedar=false;
+bool stdin_nv12_mode=false;
 
 static bool read_env_uint32(const char *name, uint32_t &value) {
     const char *env = getenv(name);
@@ -1092,6 +1096,226 @@ static bool select_color_cycle_plane(int fd, struct modeset_output *out, uint32_
 }
 
 // main
+
+int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vrefresh) {
+    uint32_t width = mode_width ? mode_width : 1280;
+    uint32_t height = mode_height ? mode_height : 720;
+    uint32_t vrefresh = mode_vrefresh ? mode_vrefresh : 60;
+
+    const char *fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
+    int drm_fd = -1;
+    if (fd_socket && fd_socket[0]) {
+        drm_fd = receive_fd_from_socket(fd_socket);
+        if (drm_fd < 0) {
+            fprintf(stderr, "Failed to receive DRM FD from socket %s\n", fd_socket);
+            return 1;
+        }
+    }
+
+    if (drm_fd < 0) {
+        if (modeset_open(&drm_fd, "/dev/dri/card0") < 0) {
+            fprintf(stderr, "Unable to open DRM node for stdin NV12 mode.\n");
+            return 1;
+        }
+    }
+
+    struct modeset_output *out = static_cast<struct modeset_output *>(calloc(1, sizeof(*out)));
+    if (!out) {
+        perror("calloc modeset_output");
+        close(drm_fd);
+        return 1;
+    }
+
+    struct RawNv12Buffer {
+        uint32_t fb_id{0};
+        uint32_t handle{0};
+        void *map{nullptr};
+        size_t size{0};
+        uint32_t pitch{0};
+    };
+
+    std::vector<RawNv12Buffer> buffers;
+    auto destroy_buffer = [&](RawNv12Buffer &buf) {
+        if (buf.map && buf.map != MAP_FAILED) {
+            munmap(buf.map, buf.size);
+            buf.map = nullptr;
+        }
+        if (buf.fb_id) {
+            drmModeRmFB(drm_fd, buf.fb_id);
+            buf.fb_id = 0;
+        }
+        if (buf.handle) {
+            struct drm_mode_destroy_dumb destroy{};
+            destroy.handle = buf.handle;
+            ioctl(drm_fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
+            buf.handle = 0;
+        }
+        buf.size = 0;
+        buf.pitch = 0;
+    };
+
+    bool prepared = false;
+    int exit_code = 0;
+    uint32_t frame_width = width;
+    uint32_t frame_height = height;
+    size_t frame_size = 0;
+    size_t buffer_index = 0;
+    bool eof = false;
+
+    if (modeset_prepare(drm_fd,
+                        out,
+                        static_cast<uint16_t>(width),
+                        static_cast<uint16_t>(height),
+                        vrefresh,
+                        DRM_FORMAT_NV12,
+                        MODESET_PLANE_TYPE_PRIMARY) != 0) {
+        fprintf(stderr, "Failed to prepare DRM output for stdin NV12 mode.\n");
+        exit_code = 1;
+        goto finish;
+    }
+    prepared = true;
+
+    frame_width = out->video_frm_width ? out->video_frm_width : width;
+    frame_height = out->video_frm_height ? out->video_frm_height : height;
+    if (frame_width == 0 || frame_height == 0) {
+        fprintf(stderr,
+                "Invalid frame dimensions for stdin NV12 mode (%ux%u).\n",
+                frame_width,
+                frame_height);
+        exit_code = 1;
+        goto finish;
+    }
+
+    frame_size = static_cast<size_t>(frame_width) * frame_height * 3 / 2;
+    printf("Rendering raw NV12 stream %ux%u@%u from stdin.\n", frame_width, frame_height, vrefresh);
+
+    buffers.assign(3, RawNv12Buffer{});
+    for (auto &buf : buffers) {
+        struct drm_mode_create_dumb create{};
+        create.width = frame_width;
+        create.height = frame_height * 3 / 2;
+        create.bpp = 8;
+        if (ioctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create) != 0) {
+            perror("DRM_IOCTL_MODE_CREATE_DUMB");
+            exit_code = 1;
+            break;
+        }
+        buf.handle = create.handle;
+        buf.pitch = create.pitch;
+        buf.size = static_cast<size_t>(create.pitch) * create.height;
+
+        uint32_t handles[4] = {buf.handle, buf.handle, 0, 0};
+        uint32_t pitches[4] = {buf.pitch, buf.pitch, 0, 0};
+        uint32_t offsets[4] = {0, buf.pitch * frame_height, 0, 0};
+        if (exit_code == 0 &&
+            drmModeAddFB2(drm_fd,
+                          frame_width,
+                          frame_height,
+                          DRM_FORMAT_NV12,
+                          handles,
+                          pitches,
+                          offsets,
+                          &buf.fb_id,
+                          0) != 0) {
+            perror("drmModeAddFB2");
+            exit_code = 1;
+        }
+        if (exit_code != 0) {
+            break;
+        }
+
+        struct drm_mode_map_dumb map{};
+        map.handle = buf.handle;
+        if (ioctl(drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map) != 0) {
+            perror("DRM_IOCTL_MODE_MAP_DUMB");
+            exit_code = 1;
+            break;
+        }
+        buf.map = mmap(nullptr, buf.size, PROT_READ | PROT_WRITE, MAP_SHARED, drm_fd, map.offset);
+        if (buf.map == MAP_FAILED) {
+            perror("mmap");
+            buf.map = nullptr;
+            exit_code = 1;
+            break;
+        }
+        memset(buf.map, 0, frame_size);
+    }
+    if (exit_code != 0) {
+        goto finish;
+    }
+
+    if (modeset_perform_modeset(drm_fd,
+                                 out,
+                                 out->video_request,
+                                 &out->video_plane,
+                                 buffers[0].fb_id,
+                                 frame_width,
+                                 frame_height,
+                                 0) != 0) {
+        fprintf(stderr, "Failed to submit initial frame for stdin NV12 mode.\n");
+        exit_code = 1;
+        goto finish;
+    }
+
+    while (!signal_flag && !eof) {
+        RawNv12Buffer &buf = buffers[buffer_index];
+        uint8_t *dst = static_cast<uint8_t *>(buf.map);
+        size_t remaining = frame_size;
+        size_t offset = 0;
+        while (remaining > 0 && !signal_flag) {
+            ssize_t chunk = read(STDIN_FILENO, dst + offset, remaining);
+            if (chunk > 0) {
+                offset += static_cast<size_t>(chunk);
+                remaining -= static_cast<size_t>(chunk);
+            } else if (chunk == 0) {
+                eof = true;
+                break;
+            } else if (errno == EINTR) {
+                continue;
+            } else {
+                perror("read");
+                eof = true;
+                exit_code = 1;
+                break;
+            }
+        }
+        if (remaining > 0 || eof) {
+            break;
+        }
+        extra_modeset_set_fb(drm_fd, out, &out->video_plane, buf.fb_id);
+        buffer_index = (buffer_index + 1) % buffers.size();
+    }
+
+finish:
+    for (auto &buf : buffers) {
+        destroy_buffer(buf);
+    }
+
+    if (prepared && out->saved_crtc) {
+        drmModeSetCrtc(drm_fd,
+                       out->saved_crtc->crtc_id,
+                       out->saved_crtc->buffer_id,
+                       out->saved_crtc->x,
+                       out->saved_crtc->y,
+                       &out->connector.id,
+                       1,
+                       &out->saved_crtc->mode);
+        drmModeFreeCrtc(out->saved_crtc);
+        out->saved_crtc = nullptr;
+    }
+    if (prepared && out->video_request) {
+        drmModeAtomicFree(out->video_request);
+        out->video_request = nullptr;
+    }
+    if (prepared) {
+        modeset_cleanup(drm_fd, out);
+    } else {
+        free(out);
+    }
+
+    close(drm_fd);
+    return exit_code;
+}
 
 int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh){
     int ret;
@@ -1305,6 +1529,10 @@ int main(int argc, char **argv)
         force_cedar=true;
         continue;
     }
+    __OnArgument("--stdin-nv12") {
+        stdin_nv12_mode=true;
+        continue;
+    }
     __OnArgument("--color-cycle") {
         color_cycle=true;
         continue;
@@ -1335,16 +1563,29 @@ int main(int argc, char **argv)
 #if HAVE_ROCKCHIP
     // H264 or H265
     MppCodingType mpp_type = MPP_VIDEO_CodingAVC;
-    if(decode_h265){
-        printf("Decoding h265\n");
-        mpp_type = MPP_VIDEO_CodingHEVC;
-    }else{
-        printf("Decoding h264 (default)\n");
+    if (!stdin_nv12_mode) {
+        if(decode_h265){
+            printf("Decoding h265\n");
+            mpp_type = MPP_VIDEO_CodingHEVC;
+        }else{
+            printf("Decoding h264 (default)\n");
+        }
     }
 #endif
     signal(SIGINT, sig_handler);
     signal(SIGPIPE, sig_handler);
     printf("Rendering mode %d\n",develop_rendering_mode);
+    if(stdin_nv12_mode){
+        if (udp_port != -1) {
+            fprintf(stderr, "--stdin-nv12 ignores UDP input; reading from stdin.\n");
+            udp_port = -1;
+        }
+        if (aw_display) {
+            fprintf(stderr, "--stdin-nv12 overrides --aw-display Cedar path.\n");
+            aw_display = false;
+        }
+        return run_stdin_nv12(mode_width, mode_height, mode_vrefresh);
+    }
     if(color_cycle){
         return run_color_cycle(mode_width,mode_height,mode_vrefresh);
     }
