@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <cctype>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -1265,14 +1266,18 @@ int run_stdin_nv_mode(const std::vector<ScreenMode> &modes, const NvStdinConfig 
     if (modes.size() > 1) {
         printf("Trying %zu screen mode candidates for stdin %s input.\n", modes.size(), config.mode_name);
     }
+
     for (size_t idx = 0; idx < modes.size(); ++idx) {
-        const ScreenMode &candidate = modes[idx];
+        ScreenMode candidate = modes[idx];
         struct modeset_output *candidate_out = static_cast<struct modeset_output *>(calloc(1, sizeof(*candidate_out)));
         if (!candidate_out) {
-            perror("calloc modeset_output");
+            fprintf(stderr,
+                    "Failed to allocate modeset output structure for stdin %s mode.\n",
+                    format_name);
             exit_code = 1;
-            goto finish;
+            break;
         }
+
         if (modeset_prepare(drm_fd,
                             candidate_out,
                             candidate.width,
@@ -1496,6 +1501,14 @@ finish:
         close(drm_fd);
     }
     return exit_code;
+}
+
+int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
+    return run_stdin_raw(modes, "NV12", "FPVUE_STDIN_NV12", DRM_FORMAT_NV12);
+}
+
+int run_stdin_nv21(const std::vector<ScreenMode> &modes) {
+    return run_stdin_raw(modes, "NV21", "FPVUE_STDIN_NV21", DRM_FORMAT_NV21);
 }
 
 
