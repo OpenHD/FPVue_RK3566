@@ -2,6 +2,7 @@
 #define FPVUE_ALLWINNERV4L2DISPLAY_H
 
 #include <atomic>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -41,6 +42,7 @@ private:
   bool setup_drm();
   bool setup_v4l2();
   void decode_loop();
+  int open_candidate_v4l2_device(const char* path);
 
   int m_port;
   bool m_h265;
@@ -65,6 +67,9 @@ private:
   bool m_modeset_initialized{false};
 
   struct modeset_output m_output{};
+
+  std::string m_v4l2_device_path;
+  std::string m_v4l2_driver_name;
 
   std::vector<void*> m_output_buffers;
   std::vector<void*> m_capture_buffers;

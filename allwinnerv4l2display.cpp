@@ -13,8 +13,11 @@
 #include <drm_fourcc.h>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace {
@@ -158,12 +161,82 @@ bool AllwinnerV4L2Display::setup_drm() {
   return true;
 }
 
+int AllwinnerV4L2Display::open_candidate_v4l2_device(const char* path) {
+  if (!path)
+    return -1;
+
+  int fd = open(path, O_RDWR | O_NONBLOCK);
+  if (fd < 0)
+    return -1;
+
+  struct v4l2_capability caps;
+  memset(&caps, 0, sizeof(caps));
+  if (ioctl(fd, VIDIOC_QUERYCAP, &caps) < 0) {
+    close(fd);
+    return -1;
+  }
+
+  uint32_t capability_mask = caps.capabilities;
+  if (capability_mask & V4L2_CAP_DEVICE_CAPS)
+    capability_mask = caps.device_caps;
+
+  bool streaming = capability_mask & V4L2_CAP_STREAMING;
+  bool output = capability_mask & (V4L2_CAP_VIDEO_OUTPUT_MPLANE | V4L2_CAP_VIDEO_OUTPUT);
+  bool capture = capability_mask & (V4L2_CAP_VIDEO_CAPTURE_MPLANE | V4L2_CAP_VIDEO_CAPTURE);
+  bool mem2mem = capability_mask & (V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_VIDEO_M2M);
+
+  if (!streaming || !(mem2mem || (output && capture))) {
+    close(fd);
+    return -1;
+  }
+
+  m_v4l2_driver_name = reinterpret_cast<const char*>(caps.driver);
+  return fd;
+}
+
 bool AllwinnerV4L2Display::setup_v4l2() {
-  m_v4l2_fd = open("/dev/video0", O_RDWR | O_NONBLOCK);
+  std::vector<std::string> candidates;
+  std::set<std::string> seen;
+
+  m_v4l2_driver_name.clear();
+
+  const char* override_device = getenv("FPVUE_V4L2_DEVICE");
+  if (override_device && override_device[0] != '\0') {
+    candidates.emplace_back(override_device);
+    seen.insert(candidates.back());
+  }
+
+  for (int index = 0; index < 32; ++index) {
+    char path[32];
+    snprintf(path, sizeof(path), "/dev/video%d", index);
+    if (seen.insert(path).second) {
+      candidates.emplace_back(path);
+    }
+  }
+
+  for (const auto& device_path : candidates) {
+    int fd = open_candidate_v4l2_device(device_path.c_str());
+    if (fd >= 0) {
+      m_v4l2_fd = fd;
+      m_v4l2_device_path = device_path;
+      break;
+    }
+  }
+
   if (m_v4l2_fd < 0) {
+    if (override_device && override_device[0] != '\0') {
+      std::cerr << "Failed to open V4L2 device override '" << override_device
+                << "'." << std::endl;
+    }
     perror("open v4l2");
     return false;
   }
+
+  std::cout << "Using Cedar V4L2 decoder " << m_v4l2_device_path;
+  if (!m_v4l2_driver_name.empty()) {
+    std::cout << " (driver '" << m_v4l2_driver_name << "')";
+  }
+  std::cout << "." << std::endl;
 
   struct v4l2_format fmt;
   memset(&fmt, 0, sizeof(fmt));
