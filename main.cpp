@@ -1114,7 +1114,10 @@ static bool read_env_int(const char *name, int &value) {
     return true;
 }
 
-static bool select_color_cycle_plane(int fd, struct modeset_output *out, uint32_t plane_id) {
+static bool select_plane_for_output(int fd,
+                                    struct modeset_output *out,
+                                    uint32_t plane_id,
+                                    uint32_t required_format) {
     if (plane_id == 0) {
         return false;
     }
@@ -1130,7 +1133,7 @@ static bool select_color_cycle_plane(int fd, struct modeset_output *out, uint32_
     bool usable = false;
     if (plane->possible_crtcs & (1u << out->crtc_index)) {
         for (int j = 0; j < plane->count_formats; ++j) {
-            if (plane->formats[j] == DRM_FORMAT_ARGB8888) {
+            if (plane->formats[j] == required_format) {
                 usable = true;
                 break;
             }
@@ -1156,6 +1159,28 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         fprintf(stderr, "stdin NV12 mode requires at least one screen mode candidate.\n");
         return 1;
     }
+
+    enum modeset_plane_type plane_type = MODESET_PLANE_TYPE_PRIMARY;
+    const char *plane_type_env = getenv("FPVUE_STDIN_NV12_PLANE_TYPE");
+    if (plane_type_env && strcmp(plane_type_env, "overlay") == 0) {
+        plane_type = MODESET_PLANE_TYPE_OVERLAY;
+    }
+
+    uint32_t requested_plane_id = 0;
+    bool have_plane_request = read_env_uint32("FPVUE_STDIN_NV12_PLANE_ID", requested_plane_id);
+
+    uint32_t dst_width_override = 0;
+    uint32_t dst_height_override = 0;
+    bool have_dst_width = read_env_uint32("FPVUE_STDIN_NV12_CRTC_WIDTH", dst_width_override);
+    bool have_dst_height = read_env_uint32("FPVUE_STDIN_NV12_CRTC_HEIGHT", dst_height_override);
+
+    int dst_x_override = 0;
+    int dst_y_override = 0;
+    bool have_dst_x = read_env_int("FPVUE_STDIN_NV12_CRTC_X", dst_x_override);
+    bool have_dst_y = read_env_int("FPVUE_STDIN_NV12_CRTC_Y", dst_y_override);
+
+    int plane_zpos = 0;
+    read_env_int("FPVUE_STDIN_NV12_ZPOS", plane_zpos);
 
     const char *fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
     int drm_fd = -1;
@@ -1231,11 +1256,21 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
                             candidate.height,
                             candidate.vrefresh,
                             DRM_FORMAT_NV12,
-                            MODESET_PLANE_TYPE_PRIMARY) == 0) {
-            out = candidate_out;
-            prepared = true;
-            selected_mode = candidate;
-            break;
+                            plane_type) == 0) {
+            bool usable_candidate = true;
+            if (have_plane_request && requested_plane_id != 0 &&
+                !select_plane_for_output(drm_fd, candidate_out, requested_plane_id, DRM_FORMAT_NV12)) {
+                fprintf(stderr,
+                        "Failed to select requested plane %u for stdin NV12 mode; trying next candidate.\n",
+                        requested_plane_id);
+                usable_candidate = false;
+            }
+            if (usable_candidate) {
+                out = candidate_out;
+                prepared = true;
+                selected_mode = candidate;
+                break;
+            }
         }
 
         fprintf(stderr,
@@ -1256,6 +1291,35 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         exit_code = 1;
         goto finish;
     }
+
+    if (have_dst_width)
+        out->video_crtc_width = static_cast<int>(dst_width_override);
+    if (have_dst_height)
+        out->video_crtc_height = static_cast<int>(dst_height_override);
+    if (have_dst_x)
+        out->video_crtc_x = dst_x_override;
+    if (have_dst_y)
+        out->video_crtc_y = dst_y_override;
+    if (out->video_crtc_width <= 0)
+        out->video_crtc_width = out->mode.hdisplay;
+    if (out->video_crtc_height <= 0)
+        out->video_crtc_height = out->mode.vdisplay;
+    if (out->video_crtc_width > out->mode.hdisplay)
+        out->video_crtc_width = out->mode.hdisplay;
+    if (out->video_crtc_height > out->mode.vdisplay)
+        out->video_crtc_height = out->mode.vdisplay;
+    if (out->video_crtc_x < 0)
+        out->video_crtc_x = 0;
+    if (out->video_crtc_y < 0)
+        out->video_crtc_y = 0;
+    if (out->video_crtc_x + out->video_crtc_width > out->mode.hdisplay)
+        out->video_crtc_x = out->mode.hdisplay - out->video_crtc_width;
+    if (out->video_crtc_y + out->video_crtc_height > out->mode.vdisplay)
+        out->video_crtc_y = out->mode.vdisplay - out->video_crtc_height;
+    if (out->video_crtc_x < 0)
+        out->video_crtc_x = 0;
+    if (out->video_crtc_y < 0)
+        out->video_crtc_y = 0;
 
     frame_width = out->video_frm_width ? out->video_frm_width : selected_mode.width;
     frame_height = out->video_frm_height ? out->video_frm_height : selected_mode.height;
@@ -1333,7 +1397,7 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
                                  buffers[0].fb_id,
                                  frame_width,
                                  frame_height,
-                                 0) != 0) {
+                                 plane_zpos) != 0) {
         fprintf(stderr, "Failed to submit initial frame for stdin NV12 mode.\n");
         exit_code = 1;
         goto finish;
@@ -1461,7 +1525,7 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
         return 1;
     }
     if (have_plane_request && requested_plane_id != 0 &&
-        !select_color_cycle_plane(fd, out, requested_plane_id)) {
+        !select_plane_for_output(fd, out, requested_plane_id, DRM_FORMAT_ARGB8888)) {
         fprintf(stderr, "Failed to select requested plane %u for color cycle\n", requested_plane_id);
     }
     if (have_dst_width)
