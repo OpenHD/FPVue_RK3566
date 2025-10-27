@@ -234,18 +234,14 @@ static bool plane_supports_argb8888(const drmModePlanePtr plane) {
     return false;
 }
 
-static bool determine_active_crtc(int fd, uint32_t *crtc_index_out, uint32_t *crtc_id_out) {
+static bool determine_active_crtc_index(int fd, uint32_t *crtc_index_out) {
     drmModeRes *resources = drmModeGetResources(fd);
     if (!resources)
         return false;
 
     bool found = false;
     uint32_t crtc_index = 0;
-    uint32_t crtc_id = 0;
     const bool has_crtcs = resources->count_crtcs > 0;
-
-    if (has_crtcs)
-        crtc_id = resources->crtcs[0];
 
     for (int i = 0; i < resources->count_connectors && !found; ++i) {
         drmModeConnector *connector = drmModeGetConnector(fd, resources->connectors[i]);
@@ -259,11 +255,10 @@ static bool determine_active_crtc(int fd, uint32_t *crtc_index_out, uint32_t *cr
                 if (!encoder)
                     continue;
 
-                uint32_t encoder_crtc_id = encoder->crtc_id;
+                uint32_t crtc_id = encoder->crtc_id;
                 for (int k = 0; k < resources->count_crtcs; ++k) {
-                    if (resources->crtcs[k] == encoder_crtc_id) {
+                    if (resources->crtcs[k] == static_cast<int>(crtc_id)) {
                         crtc_index = static_cast<uint32_t>(k);
-                        crtc_id = resources->crtcs[k];
                         found = true;
                         break;
                     }
@@ -276,10 +271,8 @@ static bool determine_active_crtc(int fd, uint32_t *crtc_index_out, uint32_t *cr
         drmModeFreeConnector(connector);
     }
 
-    if (!found && has_crtcs) {
+    if (!found && has_crtcs)
         crtc_index = 0;
-        crtc_id = resources->crtcs[0];
-    }
 
     bool success = found || has_crtcs;
     drmModeFreeResources(resources);
@@ -287,8 +280,6 @@ static bool determine_active_crtc(int fd, uint32_t *crtc_index_out, uint32_t *cr
     if (success) {
         if (crtc_index_out)
             *crtc_index_out = crtc_index;
-        if (crtc_id_out)
-            *crtc_id_out = crtc_id;
         return true;
     }
 
@@ -348,8 +339,7 @@ static bool build_planes_for_crtc_value(const char *drm_node, std::string &value
         fprintf(stderr, "Warning: Failed to enable universal planes capability on %s\n", drm_node);
 
     uint32_t crtc_index = 0;
-    uint32_t crtc_id = 0;
-    if (!determine_active_crtc(fd, &crtc_index, &crtc_id)) {
+    if (!determine_active_crtc_index(fd, &crtc_index)) {
         fprintf(stderr, "Failed to determine active CRTC for %s\n", drm_node);
         close(fd);
         return false;
@@ -370,7 +360,7 @@ static bool build_planes_for_crtc_value(const char *drm_node, std::string &value
     planes.push_back(selection.overlay_id);
 
     std::ostringstream oss;
-    oss << crtc_id << ":";
+    oss << crtc_index << ":";
     for (size_t i = 0; i < planes.size(); ++i) {
         if (i > 0)
             oss << ",";
