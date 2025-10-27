@@ -56,9 +56,13 @@ private:
   InputMode m_input_mode{InputMode::UDP};
   bool m_drm_prepared{false};
 
-  uint32_t m_mode_width{1280};
-  uint32_t m_mode_height{720};
-  uint32_t m_mode_vrefresh{60};
+  uint32_t m_stream_width{1280};
+  uint32_t m_stream_height{720};
+  uint32_t m_stream_vrefresh{60};
+  uint32_t m_display_width{0};
+  uint32_t m_display_height{0};
+  uint32_t m_display_vrefresh{0};
+  bool m_modeset_initialized{false};
 
   struct modeset_output m_output{};
 

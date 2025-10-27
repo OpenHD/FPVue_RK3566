@@ -488,25 +488,82 @@ struct modeset_output *modeset_output_create(int fd, drmModeRes *res, drmModeCon
 		goto out_error;
 	}
 
-	int fc = 0;
-	if (mode_width>0 && mode_height>0 && mode_vrefresh>0) {
-		fc = -1;
-		printf( "Available modes:\n");
-		for (int i = 0; i < conn->count_modes; i++ ) {
-			printf( "%d : %dx%d@%d\n",i, conn->modes[i].hdisplay, conn->modes[i].vdisplay , conn->modes[i].vrefresh );
-			if (conn->modes[i].hdisplay == mode_width &&
-			conn->modes[i].vdisplay == mode_height &&
-			conn->modes[i].vrefresh == mode_vrefresh
-			) {
-				fc = i;
-			}
-		}
-		if (fc < 0) {
-			fprintf(stderr, "couldn't find a matching mode for %dx%d@%d\n", mode_width , mode_height , mode_vrefresh);
-			goto out_error;
-		} 
-		printf( "Using screen mode %dx%d@%d\n",conn->modes[fc].hdisplay, conn->modes[fc].vdisplay , conn->modes[fc].vrefresh );
-	}
+        int fc = 0;
+        if (mode_width > 0 && mode_height > 0 && mode_vrefresh > 0) {
+                fc = -1;
+                int upscale_candidate = -1;
+                int same_refresh_candidate = -1;
+                int max_candidate = 0;
+                uint64_t requested_area = (uint64_t)mode_width * (uint64_t)mode_height;
+                uint64_t best_upscale_overhead = UINT64_MAX;
+                uint64_t best_same_refresh_area = 0;
+                uint64_t best_max_area = 0;
+                printf("Available modes:\n");
+                for (int i = 0; i < conn->count_modes; i++) {
+                        const drmModeModeInfo *candidate = &conn->modes[i];
+                        uint64_t area = (uint64_t)candidate->hdisplay * (uint64_t)candidate->vdisplay;
+                        printf("%d : %dx%d@%d\n", i, candidate->hdisplay, candidate->vdisplay, candidate->vrefresh);
+                        if (candidate->hdisplay == mode_width &&
+                            candidate->vdisplay == mode_height &&
+                            candidate->vrefresh == mode_vrefresh) {
+                                fc = i;
+                        }
+                        if (area > best_max_area) {
+                                best_max_area = area;
+                                max_candidate = i;
+                        }
+                        if (candidate->vrefresh != mode_vrefresh)
+                                continue;
+                        if (area >= requested_area) {
+                                uint64_t overhead = area - requested_area;
+                                if (overhead < best_upscale_overhead ||
+                                    (overhead == best_upscale_overhead && upscale_candidate >= 0 &&
+                                     area < (uint64_t)conn->modes[upscale_candidate].hdisplay *
+                                             (uint64_t)conn->modes[upscale_candidate].vdisplay)) {
+                                        best_upscale_overhead = overhead;
+                                        upscale_candidate = i;
+                                } else if (overhead == best_upscale_overhead && upscale_candidate < 0) {
+                                        best_upscale_overhead = overhead;
+                                        upscale_candidate = i;
+                                }
+                        }
+                        if (area > best_same_refresh_area) {
+                                best_same_refresh_area = area;
+                                same_refresh_candidate = i;
+                        }
+                }
+                if (fc < 0) {
+                        if (upscale_candidate >= 0) {
+                                fc = upscale_candidate;
+                                fprintf(stderr,
+                                        "couldn't find a matching mode for %dx%d@%d, using %dx%d@%d for upscaling\n",
+                                        mode_width, mode_height, mode_vrefresh,
+                                        conn->modes[fc].hdisplay,
+                                        conn->modes[fc].vdisplay,
+                                        conn->modes[fc].vrefresh);
+                        } else if (same_refresh_candidate >= 0) {
+                                fc = same_refresh_candidate;
+                                fprintf(stderr,
+                                        "couldn't find a matching mode for %dx%d@%d, using %dx%d@%d with matching refresh\n",
+                                        mode_width, mode_height, mode_vrefresh,
+                                        conn->modes[fc].hdisplay,
+                                        conn->modes[fc].vdisplay,
+                                        conn->modes[fc].vrefresh);
+                        } else {
+                                fc = max_candidate;
+                                fprintf(stderr,
+                                        "couldn't find a matching mode for %dx%d@%d, using %dx%d@%d\n",
+                                        mode_width, mode_height, mode_vrefresh,
+                                        conn->modes[fc].hdisplay,
+                                        conn->modes[fc].vdisplay,
+                                        conn->modes[fc].vrefresh);
+                        }
+                }
+                printf("Using screen mode %dx%d@%d\n",
+                       conn->modes[fc].hdisplay,
+                       conn->modes[fc].vdisplay,
+                       conn->modes[fc].vrefresh);
+        }
 	memcpy(&out->mode, &conn->modes[fc], sizeof(out->mode));
 	if (drmModeCreatePropertyBlob(fd, &out->mode, sizeof(out->mode), &out->mode_blob_id) != 0) {
 		fprintf(stderr, "couldn't create a blob property\n");

@@ -29,9 +29,12 @@ AllwinnerV4L2Display::AllwinnerV4L2Display(int udp_port,
                                            uint32_t mode_vrefresh)
     : m_port(udp_port),
       m_h265(h265),
-      m_mode_width(mode_width ? mode_width : 1280),
-      m_mode_height(mode_height ? mode_height : 720),
-      m_mode_vrefresh(mode_vrefresh ? mode_vrefresh : 60) {
+      m_stream_width(mode_width ? mode_width : 1280),
+      m_stream_height(mode_height ? mode_height : 720),
+      m_stream_vrefresh(mode_vrefresh ? mode_vrefresh : 60),
+      m_display_width(mode_width),
+      m_display_height(mode_height),
+      m_display_vrefresh(mode_vrefresh) {
   if (m_port < 0) {
     m_input_mode = InputMode::StdIn;
     m_input_fd = STDIN_FILENO;
@@ -68,6 +71,7 @@ bool AllwinnerV4L2Display::start() {
     stop();
     return false;
   }
+  m_modeset_initialized = false;
   m_running = true;
   m_thread = std::thread(&AllwinnerV4L2Display::decode_loop, this);
   return true;
@@ -79,6 +83,7 @@ void AllwinnerV4L2Display::stop() {
     if (m_thread.joinable())
       m_thread.join();
   }
+  m_modeset_initialized = false;
 
   if (m_sock >= 0 && m_input_mode == InputMode::UDP) {
     close(m_sock);
@@ -94,6 +99,10 @@ void AllwinnerV4L2Display::stop() {
   }
   if (m_drm_fd >= 0) {
     if (m_drm_prepared) {
+      if (m_output.video_request) {
+        drmModeAtomicFree(m_output.video_request);
+        m_output.video_request = nullptr;
+      }
       modeset_cleanup(m_drm_fd, &m_output);
       m_drm_prepared = false;
     }
@@ -138,9 +147,9 @@ bool AllwinnerV4L2Display::setup_drm() {
   }
   if (modeset_prepare(m_drm_fd,
                       &m_output,
-                      m_mode_width,
-                      m_mode_height,
-                      m_mode_vrefresh,
+                      m_display_width,
+                      m_display_height,
+                      m_display_vrefresh,
                       DRM_FORMAT_NV12,
                       MODESET_PLANE_TYPE_PRIMARY) < 0) {
     return false;
@@ -159,8 +168,8 @@ bool AllwinnerV4L2Display::setup_v4l2() {
   struct v4l2_format fmt;
   memset(&fmt, 0, sizeof(fmt));
   fmt.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-  fmt.fmt.pix_mp.width = m_mode_width;
-  fmt.fmt.pix_mp.height = m_mode_height;
+  fmt.fmt.pix_mp.width = m_stream_width;
+  fmt.fmt.pix_mp.height = m_stream_height;
   fmt.fmt.pix_mp.pixelformat =
       m_h265 ? V4L2_PIX_FMT_HEVC_SLICE : V4L2_PIX_FMT_H264_SLICE;
   fmt.fmt.pix_mp.num_planes = 1;
@@ -171,14 +180,16 @@ bool AllwinnerV4L2Display::setup_v4l2() {
 
   memset(&fmt, 0, sizeof(fmt));
   fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-  fmt.fmt.pix_mp.width = m_mode_width;
-  fmt.fmt.pix_mp.height = m_mode_height;
+  fmt.fmt.pix_mp.width = m_stream_width;
+  fmt.fmt.pix_mp.height = m_stream_height;
   fmt.fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12M;
   fmt.fmt.pix_mp.num_planes = 2;
   if (ioctl(m_v4l2_fd, VIDIOC_S_FMT, &fmt) < 0) {
     perror("S_FMT capture");
     return false;
   }
+  m_stream_width = fmt.fmt.pix_mp.width;
+  m_stream_height = fmt.fmt.pix_mp.height;
 
   struct v4l2_requestbuffers req;
   memset(&req, 0, sizeof(req));
@@ -267,7 +278,7 @@ bool AllwinnerV4L2Display::setup_v4l2() {
                            fmt.fmt.pix_mp.plane_fmt[1].bytesperline, 0, 0};
     uint32_t offsets[4] = {planes[0].data_offset, planes[1].data_offset, 0, 0};
     uint32_t fb_id = 0;
-    if (drmModeAddFB2(m_drm_fd, m_mode_width, m_mode_height, DRM_FORMAT_NV12,
+    if (drmModeAddFB2(m_drm_fd, m_stream_width, m_stream_height, DRM_FORMAT_NV12,
                       handles, pitches, offsets, &fb_id, 0) != 0) {
       perror("AddFB2");
       close(prime_fd);
@@ -343,7 +354,26 @@ void AllwinnerV4L2Display::decode_loop() {
     cbuf.m.planes = cplanes;
     if (ioctl(m_v4l2_fd, VIDIOC_DQBUF, &cbuf) == 0) {
       int fb_id = m_capture_fbs[cbuf.index];
-      extra_modeset_set_fb(m_drm_fd, &m_output, &m_output.video_plane, fb_id);
+      bool submit_via_set_fb = true;
+      if (!m_modeset_initialized && m_output.video_request) {
+        int ret = modeset_perform_modeset(m_drm_fd,
+                                          &m_output,
+                                          m_output.video_request,
+                                          &m_output.video_plane,
+                                          fb_id,
+                                          static_cast<int>(m_stream_width),
+                                          static_cast<int>(m_stream_height),
+                                          0);
+        if (ret == 0) {
+          m_modeset_initialized = true;
+          submit_via_set_fb = false;
+        } else {
+          std::cerr << "Failed to perform initial modeset for Cedar display path." << std::endl;
+        }
+      }
+      if (submit_via_set_fb) {
+        extra_modeset_set_fb(m_drm_fd, &m_output, &m_output.video_plane, fb_id);
+      }
       ioctl(m_v4l2_fd, VIDIOC_QBUF, &cbuf);
     }
 
