@@ -434,12 +434,36 @@ static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
     }).detach();
 }
 
+static std::string build_sample_video_pipeline_command(const char *debug_sample_path) {
+    std::ostringstream pipeline_builder;
+    pipeline_builder << "run_decoder() {\n"
+                     << "    decoder=\"$1\";\n"
+                     << "    echo \"Attempting debug decode with $decoder\" >&2;\n"
+                     << "    gst-launch-1.0 -q filesrc location=" << debug_sample_path
+                     << " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1"
+                     << " ! video/x-h264,stream-format=byte-stream,alignment=au ! queue ! \"$decoder\""
+                     << " ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false;\n"
+                     << "}\n"
+                     << "(run_decoder omxh264dec || run_decoder mppvideodec || run_decoder avdec_h264)";
+
+    std::string pipeline_command = "(";
+    pipeline_command += pipeline_builder.str();
+    pipeline_command += ") | fpvue --screen-mode 1280x720@60 --stdin-nv12";
+    return pipeline_command;
+}
+
+enum class DebugMode {
+    None,
+    ColorCycle,
+    DualVideo,
+};
+
 int main(int argc, char **argv) {
     const char *drm_node = "/dev/dri/card0";
     const char *socket_path = "/tmp/drm-master";
     int clients = 2;
     uint16_t width = 0, height = 0;
-    bool debug_mode = false;
+    DebugMode debug_mode = DebugMode::None;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "720p") == 0) {
@@ -455,9 +479,13 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "--clients") == 0 && i + 1 < argc) {
             clients = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-debug") == 0 || strcmp(argv[i], "--debug") == 0) {
-            debug_mode = true;
+            debug_mode = DebugMode::ColorCycle;
+        } else if (strcmp(argv[i], "-debug2") == 0 || strcmp(argv[i], "--debug2") == 0) {
+            debug_mode = DebugMode::DualVideo;
         } else {
-            fprintf(stderr, "Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n] [-debug]\n", argv[0]);
+            fprintf(stderr,
+                    "Usage: %s [720p|1080p] [--socket path] [--drm node] [--clients n] [-debug|-debug2]\n",
+                    argv[0]);
             return 1;
         }
     }
@@ -479,11 +507,18 @@ int main(int argc, char **argv) {
 
     const char *debug_sample_path = "/tmp/bbb_720p.mp4";
     bool debug_sample_available = true;
-    if (debug_mode)
+    bool debug_mode_enabled = debug_mode != DebugMode::None;
+    if (debug_mode_enabled)
         debug_sample_available = ensure_debug_sample_video(debug_sample_path);
 
+    if (debug_mode == DebugMode::DualVideo && !debug_sample_available) {
+        fprintf(stderr,
+                "Falling back to debug color cycle overlay; sample video unavailable for dual video mode.\n");
+        debug_mode = DebugMode::ColorCycle;
+    }
+
     pid_t primary_pid = fork();
-    bool primary_is_sample_player = debug_mode && debug_sample_available;
+    bool primary_is_sample_player = debug_mode != DebugMode::None && debug_sample_available;
     if (primary_pid == 0) {
         sleep(1);
         configure_shared_drm_environment(socket_path, drm_node);
@@ -494,23 +529,17 @@ int main(int argc, char **argv) {
                 snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.overlay_plane_id);
                 setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
             }
+            if (have_plane_assignment && plane_assignment.primary_plane_id != 0 &&
+                debug_mode == DebugMode::DualVideo) {
+                char primary_plane[32];
+                snprintf(primary_plane, sizeof(primary_plane), "%u", plane_assignment.primary_plane_id);
+                setenv("FPVUE_STDIN_NV12_PLANE_ID", primary_plane, 1);
+            }
 
             // Attempt to use platform-specific hardware decoders first and fall back to a
             // software decoder if negotiation keeps failing.
-            std::ostringstream pipeline_builder;
-            pipeline_builder << "run_decoder() {\n"
-                              << "    decoder=\"$1\";\n"
-                              << "    echo \"Attempting debug decode with $decoder\" >&2;\n"
-                              << "    gst-launch-1.0 -q filesrc location=" << debug_sample_path
-                              << " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1"
-                              << " ! video/x-h264,stream-format=byte-stream,alignment=au ! queue ! \"$decoder\""
-                              << " ! videoconvert ! video/x-raw,format=NV12,width=1280,height=720 ! queue ! fdsink fd=1 sync=false;\n"
-                              << "}\n"
-                              << "(run_decoder omxh264dec || run_decoder mppvideodec || run_decoder avdec_h264)";
-
-            std::string pipeline_command = "(";
-            pipeline_command += pipeline_builder.str();
-            pipeline_command += ") | fpvue --screen-mode 1280x720@60 --stdin-nv12";
+            std::string pipeline_command = build_sample_video_pipeline_command(debug_sample_path);
+            fprintf(stderr, "Launching debug sample video pipeline command:\n%s\n", pipeline_command.c_str());
 
             execlp("sh", "sh", "-c", pipeline_command.c_str(), (char *)NULL);
             perror("execlp sample video pipeline");
@@ -528,7 +557,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (debug_mode && !debug_sample_available) {
+    if (debug_mode != DebugMode::None && !debug_sample_available) {
         fprintf(stderr, "Falling back to color cycle primary client; sample video unavailable.\n");
         primary_is_sample_player = false;
     }
@@ -538,8 +567,9 @@ int main(int argc, char **argv) {
     bool capture_qopenhd_logs = false;
     pid_t overlay_pid = -1;
     bool overlay_is_qopenhd = false;
+    bool overlay_is_sample_player = false;
 
-    if (!debug_mode) {
+    if (!debug_mode_enabled) {
         capture_qopenhd_logs = pipe(stdout_pipe) == 0 && pipe(stderr_pipe) == 0;
         if (!capture_qopenhd_logs) {
             if (stdout_pipe[0] >= 0) {
@@ -632,7 +662,7 @@ int main(int argc, char **argv) {
             pipe_output_to_stream(stdout_pipe[0], stdout, "[QOpenHD] ");
             pipe_output_to_stream(stderr_pipe[0], stderr, "[QOpenHD] ");
         }
-    } else {
+    } else if (debug_mode == DebugMode::ColorCycle) {
         pid_t debug_pid = fork();
         if (debug_pid == 0) {
             sleep(2);
@@ -670,6 +700,46 @@ int main(int argc, char **argv) {
             return 1;
         }
         overlay_pid = debug_pid;
+    } else if (debug_mode == DebugMode::DualVideo) {
+        pid_t debug_pid = fork();
+        if (debug_pid == 0) {
+            sleep(3);
+            configure_shared_drm_environment(socket_path, drm_node);
+            setenv("FPVUE_STDIN_NV12_PLANE_TYPE", "overlay", 1);
+            setenv("FPVUE_STDIN_NV12_ZPOS", "1", 1);
+            if (have_plane_assignment && plane_assignment.primary_plane_id != 0) {
+                char reserved_planes[32];
+                snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.primary_plane_id);
+                setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
+            }
+            if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
+                char overlay_plane[32];
+                snprintf(overlay_plane, sizeof(overlay_plane), "%u", plane_assignment.overlay_plane_id);
+                setenv("FPVUE_STDIN_NV12_PLANE_ID", overlay_plane, 1);
+            }
+
+            char overlay_width[16];
+            char overlay_height[16];
+            char overlay_x[16];
+            char overlay_y[16];
+            snprintf(overlay_width, sizeof(overlay_width), "%d", 640);
+            snprintf(overlay_height, sizeof(overlay_height), "%d", 360);
+            snprintf(overlay_x, sizeof(overlay_x), "%d", 100);
+            snprintf(overlay_y, sizeof(overlay_y), "%d", 100);
+            setenv("FPVUE_STDIN_NV12_CRTC_WIDTH", overlay_width, 1);
+            setenv("FPVUE_STDIN_NV12_CRTC_HEIGHT", overlay_height, 1);
+            setenv("FPVUE_STDIN_NV12_CRTC_X", overlay_x, 1);
+            setenv("FPVUE_STDIN_NV12_CRTC_Y", overlay_y, 1);
+
+            std::string pipeline_command = build_sample_video_pipeline_command(debug_sample_path);
+            fprintf(stderr, "Launching debug dual video overlay pipeline command:\n%s\n", pipeline_command.c_str());
+
+            execlp("sh", "sh", "-c", pipeline_command.c_str(), (char *)NULL);
+            perror("execlp dual video overlay pipeline");
+            return 1;
+        }
+        overlay_pid = debug_pid;
+        overlay_is_sample_player = true;
     }
 
     printf("Starting display host with DRM node %s, socket %s, expecting %d clients", drm_node, socket_path, clients);
@@ -697,6 +767,14 @@ int main(int argc, char **argv) {
             } else {
                 printf("Launched QOpenHD client as PID %d using overlay plane.\n", overlay_pid);
             }
+        } else if (overlay_is_sample_player) {
+            if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
+                printf("Launched debug dual video overlay as PID %d on plane %u.\n",
+                       overlay_pid,
+                       plane_assignment.overlay_plane_id);
+            } else {
+                printf("Launched debug dual video overlay as PID %d without detected overlay plane.\n", overlay_pid);
+            }
         } else {
             if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
                 printf("Launched debug color cycle overlay as PID %d on plane %u.\n", overlay_pid,
@@ -705,24 +783,30 @@ int main(int argc, char **argv) {
                 printf("Launched debug color cycle overlay as PID %d without detected overlay plane.\n", overlay_pid);
             }
         }
-    } else if (debug_mode) {
+    } else if (debug_mode == DebugMode::ColorCycle) {
         printf("Debug overlay color cycle launch failed; see logs for details.\n");
+    } else if (debug_mode == DebugMode::DualVideo) {
+        printf("Debug dual video overlay launch failed; see logs for details.\n");
     }
 
     if (overlay_pid > 0) {
-        std::thread([overlay_pid, overlay_is_qopenhd]() {
+        std::thread([overlay_pid, overlay_is_qopenhd, overlay_is_sample_player]() {
             int status = 0;
             pid_t result = waitpid(overlay_pid, &status, 0);
             if (result > 0) {
                 if (WIFEXITED(status)) {
                     if (overlay_is_qopenhd) {
                         fprintf(stderr, "QOpenHD exited with status %d.\n", WEXITSTATUS(status));
+                    } else if (overlay_is_sample_player) {
+                        fprintf(stderr, "Debug dual video overlay exited with status %d.\n", WEXITSTATUS(status));
                     } else {
                         fprintf(stderr, "Debug color cycle overlay exited with status %d.\n", WEXITSTATUS(status));
                     }
                 } else if (WIFSIGNALED(status)) {
                     if (overlay_is_qopenhd) {
                         fprintf(stderr, "QOpenHD terminated by signal %d.\n", WTERMSIG(status));
+                    } else if (overlay_is_sample_player) {
+                        fprintf(stderr, "Debug dual video overlay terminated by signal %d.\n", WTERMSIG(status));
                     } else {
                         fprintf(stderr, "Debug color cycle overlay terminated by signal %d.\n", WTERMSIG(status));
                     }
@@ -733,7 +817,9 @@ int main(int argc, char **argv) {
 
     if (overlay_is_qopenhd) {
         printf("Qt applications launched by the host automatically share DRM master access via %s.\n", socket_path);
-    } else if (debug_mode) {
+    } else if (debug_mode == DebugMode::DualVideo) {
+        printf("Display helper debug2 mode launched dual sample video clients for DRM testing.\n");
+    } else if (debug_mode == DebugMode::ColorCycle) {
         printf("Display helper debug mode launched dual color cycle clients for DRM testing.\n");
     }
 
