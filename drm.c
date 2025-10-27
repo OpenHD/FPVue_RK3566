@@ -454,6 +454,8 @@ int modeset_setup_framebuffers(int fd, drmModeConnector *conn, struct modeset_ou
 {
         out->video_crtc_width = out->mode.hdisplay;
         out->video_crtc_height = out->mode.vdisplay;
+        out->video_crtc_x = 0;
+        out->video_crtc_y = 0;
         return 0;
 }
 
@@ -663,9 +665,9 @@ int modeset_atomic_prepare_commit(int fd, struct modeset_output *out, drmModeAto
 		return -1;
 	if (set_drm_object_property(req, plane, "SRC_H", height << 16) < 0)
 		return -1;
-	if (set_drm_object_property(req, plane, "CRTC_X", 0) < 0)
-		return -1;
-	if (set_drm_object_property(req, plane, "CRTC_Y", 0) < 0)
+        if (set_drm_object_property(req, plane, "CRTC_X", out->video_crtc_x) < 0)
+                return -1;
+        if (set_drm_object_property(req, plane, "CRTC_Y", out->video_crtc_y) < 0)
 		return -1;
 	int crtcw = out->video_crtc_width;
 	if (crtcw < width) {

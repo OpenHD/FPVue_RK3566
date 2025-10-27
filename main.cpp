@@ -1024,6 +1024,70 @@ bool x20_auto=false;
 bool aw_display=false;
 bool color_cycle=false;
 
+static bool read_env_uint32(const char *name, uint32_t &value) {
+    const char *env = getenv(name);
+    if (!env || *env == '\0') {
+        return false;
+    }
+    char *end = nullptr;
+    errno = 0;
+    unsigned long parsed = strtoul(env, &end, 0);
+    if (errno != 0 || end == env || *end != '\0') {
+        return false;
+    }
+    value = static_cast<uint32_t>(parsed);
+    return true;
+}
+
+static bool read_env_int(const char *name, int &value) {
+    const char *env = getenv(name);
+    if (!env || *env == '\0') {
+        return false;
+    }
+    char *end = nullptr;
+    errno = 0;
+    long parsed = strtol(env, &end, 0);
+    if (errno != 0 || end == env || *end != '\0') {
+        return false;
+    }
+    value = static_cast<int>(parsed);
+    return true;
+}
+
+static bool select_color_cycle_plane(int fd, struct modeset_output *out, uint32_t plane_id) {
+    if (plane_id == 0) {
+        return false;
+    }
+    if (plane_id == out->video_plane.id) {
+        return true;
+    }
+
+    drmModePlanePtr plane = drmModeGetPlane(fd, plane_id);
+    if (!plane) {
+        return false;
+    }
+
+    bool usable = false;
+    if (plane->possible_crtcs & (1u << out->crtc_index)) {
+        for (int j = 0; j < plane->count_formats; ++j) {
+            if (plane->formats[j] == DRM_FORMAT_ARGB8888) {
+                usable = true;
+                break;
+            }
+        }
+    }
+    drmModeFreePlane(plane);
+    if (!usable) {
+        return false;
+    }
+
+    modeset_drm_object_fini(&out->video_plane);
+    out->video_plane.id = plane_id;
+    modeset_get_object_properties(fd, &out->video_plane, DRM_MODE_OBJECT_PLANE);
+    drmModeAtomicSetCursor(out->video_request, 0);
+    return true;
+}
+
 // main
 
 int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh){
@@ -1049,19 +1113,78 @@ int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vre
             return 1;
         }
     }
+    enum modeset_plane_type plane_type = MODESET_PLANE_TYPE_PRIMARY;
+    const char *plane_type_env = getenv("FPVUE_COLOR_CYCLE_PLANE_TYPE");
+    if (plane_type_env && strcmp(plane_type_env, "overlay") == 0) {
+        plane_type = MODESET_PLANE_TYPE_OVERLAY;
+    }
+
+    uint32_t requested_plane_id = 0;
+    bool have_plane_request = read_env_uint32("FPVUE_COLOR_CYCLE_PLANE_ID", requested_plane_id);
+
+    uint32_t buffer_width_override = 0;
+    uint32_t buffer_height_override = 0;
+    bool have_buffer_width = read_env_uint32("FPVUE_COLOR_CYCLE_BUFFER_WIDTH", buffer_width_override);
+    bool have_buffer_height = read_env_uint32("FPVUE_COLOR_CYCLE_BUFFER_HEIGHT", buffer_height_override);
+
+    uint32_t dst_width_override = 0;
+    uint32_t dst_height_override = 0;
+    bool have_dst_width = read_env_uint32("FPVUE_COLOR_CYCLE_CRTC_WIDTH", dst_width_override);
+    bool have_dst_height = read_env_uint32("FPVUE_COLOR_CYCLE_CRTC_HEIGHT", dst_height_override);
+
+    int dst_x_override = 0;
+    int dst_y_override = 0;
+    bool have_dst_x = read_env_int("FPVUE_COLOR_CYCLE_CRTC_X", dst_x_override);
+    bool have_dst_y = read_env_int("FPVUE_COLOR_CYCLE_CRTC_Y", dst_y_override);
+
     struct modeset_output *out = (struct modeset_output *)malloc(sizeof(struct modeset_output));
-    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_ARGB8888,
-                          MODESET_PLANE_TYPE_PRIMARY);
+    ret = modeset_prepare(fd, out, mode_width, mode_height, mode_vrefresh, DRM_FORMAT_ARGB8888, plane_type);
     if (ret) {
         close(fd);
         free(out);
         return 1;
     }
+    if (have_plane_request && requested_plane_id != 0 &&
+        !select_color_cycle_plane(fd, out, requested_plane_id)) {
+        fprintf(stderr, "Failed to select requested plane %u for color cycle\n", requested_plane_id);
+    }
+    if (have_dst_width)
+        out->video_crtc_width = dst_width_override;
+    if (have_dst_height)
+        out->video_crtc_height = dst_height_override;
+    if (have_dst_x)
+        out->video_crtc_x = dst_x_override;
+    if (have_dst_y)
+        out->video_crtc_y = dst_y_override;
+    if (out->video_crtc_width <= 0)
+        out->video_crtc_width = out->mode.hdisplay;
+    if (out->video_crtc_height <= 0)
+        out->video_crtc_height = out->mode.vdisplay;
+    if (out->video_crtc_width > out->mode.hdisplay)
+        out->video_crtc_width = out->mode.hdisplay;
+    if (out->video_crtc_height > out->mode.vdisplay)
+        out->video_crtc_height = out->mode.vdisplay;
+    if (out->video_crtc_x < 0)
+        out->video_crtc_x = 0;
+    if (out->video_crtc_y < 0)
+        out->video_crtc_y = 0;
+    if (out->video_crtc_x + out->video_crtc_width > out->mode.hdisplay)
+        out->video_crtc_x = out->mode.hdisplay - out->video_crtc_width;
+    if (out->video_crtc_y + out->video_crtc_height > out->mode.vdisplay)
+        out->video_crtc_y = out->mode.vdisplay - out->video_crtc_height;
+    if (out->video_crtc_x < 0)
+        out->video_crtc_x = 0;
+    if (out->video_crtc_y < 0)
+        out->video_crtc_y = 0;
     struct modeset_buf bufs[3];
     uint32_t colors[3] = {0xff00ff00, 0xffff0000, 0xff0000ff};
     for (int i = 0; i < 3; i++) {
-        bufs[i].width = out->mode.hdisplay;
-        bufs[i].height = out->mode.vdisplay;
+        bufs[i].width = have_buffer_width ? buffer_width_override : out->mode.hdisplay;
+        bufs[i].height = have_buffer_height ? buffer_height_override : out->mode.vdisplay;
+        if (bufs[i].width == 0)
+            bufs[i].width = out->mode.hdisplay;
+        if (bufs[i].height == 0)
+            bufs[i].height = out->mode.vdisplay;
         ret = modeset_create_fb(fd, &bufs[i]);
         assert(!ret);
         uint32_t *pix = (uint32_t *)bufs[i].map;
