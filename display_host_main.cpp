@@ -360,6 +360,51 @@ static void ensure_preload_in_environment(const char *target_executable) {
     }
 }
 
+static bool ensure_debug_sample_video(const char *path) {
+    if (access(path, R_OK) == 0)
+        return true;
+
+    printf("Debug sample video %s missing, downloading...\n", path);
+    pid_t download_pid = fork();
+    if (download_pid < 0) {
+        perror("fork curl");
+        return false;
+    }
+    if (download_pid == 0) {
+        execlp("curl",
+               "curl",
+               "-L",
+               "-o",
+               path,
+               "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+               (char *)NULL);
+        perror("execlp curl");
+        _exit(127);
+    }
+
+    int status = 0;
+    if (waitpid(download_pid, &status, 0) < 0) {
+        perror("waitpid curl");
+        return false;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        int exit_code = -1;
+        if (WIFEXITED(status))
+            exit_code = WEXITSTATUS(status);
+        else if (WIFSIGNALED(status))
+            exit_code = 128 + WTERMSIG(status);
+        fprintf(stderr, "curl failed with status %d while downloading %s\n", exit_code, path);
+        return false;
+    }
+
+    if (access(path, R_OK) != 0) {
+        fprintf(stderr, "Downloaded sample video %s is not accessible\n", path);
+        return false;
+    }
+
+    return true;
+}
+
 static void pipe_output_to_stream(int fd, FILE *stream, const char *prefix) {
     std::thread([fd, stream, prefix]() {
         char buffer[512];
@@ -431,14 +476,49 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Warning: failed to determine plane assignment; clients may contend for the same plane.\n");
     }
 
-    pid_t pid = fork();
-    if (pid == 0) {
+    const char *debug_sample_path = "/tmp/bbb_720p.mp4";
+    bool debug_sample_available = true;
+    if (debug_mode)
+        debug_sample_available = ensure_debug_sample_video(debug_sample_path);
+
+    pid_t primary_pid = fork();
+    bool primary_is_sample_player = debug_mode && debug_sample_available;
+    if (primary_pid == 0) {
         sleep(1);
         configure_shared_drm_environment(socket_path, drm_node);
+
+        if (primary_is_sample_player) {
+            if (have_plane_assignment && plane_assignment.overlay_plane_id != 0) {
+                char reserved_planes[32];
+                snprintf(reserved_planes, sizeof(reserved_planes), "%u", plane_assignment.overlay_plane_id);
+                setenv("FPVUE_RESERVED_PLANE_IDS", reserved_planes, 1);
+            }
+
+            std::string pipeline_command =
+                std::string("gst-launch-1.0 -q filesrc location=") + debug_sample_path +
+                " ! qtdemux name=demux demux.video_0 ! h264parse config-interval=1 ! "
+                "video/x-h264,stream-format=byte-stream,alignment=au ! queue ! fdsink fd=1 sync=false | "
+                "fpvue --screen-mode 1280x720@60";
+
+            execlp("sh", "sh", "-c", pipeline_command.c_str(), (char *)NULL);
+            perror("execlp sample video pipeline");
+            return 1;
+        }
+
         setenv("FPVUE_COLOR_CYCLE_ZPOS", "0", 1);
         execlp("fpvue", "fpvue", "--color-cycle", NULL);
         perror("execlp fpvue");
         return 1;
+    }
+
+    if (primary_pid < 0) {
+        perror("fork primary client");
+        return 1;
+    }
+
+    if (debug_mode && !debug_sample_available) {
+        fprintf(stderr, "Falling back to color cycle primary client; sample video unavailable.\n");
+        primary_is_sample_player = false;
     }
 
     int stdout_pipe[2] = {-1, -1};
@@ -585,7 +665,11 @@ int main(int argc, char **argv) {
         printf(", forcing mode %ux%u", width, height);
     }
     printf("\n");
-    printf("Launched fpvue color cycle client as PID %d.\n", pid);
+    if (primary_is_sample_player) {
+        printf("Launched debug sample video pipeline as PID %d.\n", primary_pid);
+    } else {
+        printf("Launched fpvue color cycle client as PID %d.\n", primary_pid);
+    }
     if (have_plane_assignment) {
         printf("Reserved primary plane %u for fpvue.\n", plane_assignment.primary_plane_id);
     }
