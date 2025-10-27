@@ -951,6 +951,8 @@ void printHelp() {
     "\n"
     "    --aw-display        - use V4L2 stateless decode and sunxi-drm display\n"
     "\n"
+    "    --cedar            - force Cedar hardware decode fallback path\n"
+    "\n"
     "    --color-cycle      - display green, red and blue test screen\n"
     "\n"
     "    --rmode      - different rendering modes for development \n"
@@ -1023,6 +1025,7 @@ bool x20_force=false;
 bool x20_auto=false;
 bool aw_display=false;
 bool color_cycle=false;
+bool force_cedar=false;
 
 static bool read_env_uint32(const char *name, uint32_t &value) {
     const char *env = getenv(name);
@@ -1298,6 +1301,10 @@ int main(int argc, char **argv)
         aw_display=true;
         continue;
     }
+    __OnArgument("--cedar") {
+        force_cedar=true;
+        continue;
+    }
     __OnArgument("--color-cycle") {
         color_cycle=true;
         continue;
@@ -1486,7 +1493,49 @@ int main(int argc, char **argv)
 
     return 0;
 #else
-    fprintf(stderr, "Rockchip support not available in this build\n");
-    return 1;
+    if (!force_cedar && !aw_display) {
+        printf("Rockchip MPP not available; enabling Cedar hardware decode path.\n");
+    } else {
+        printf("Using Cedar hardware decode path.\n");
+    }
+
+    if (x20_auto || x20_force) {
+        fprintf(stderr, "Warning: x20 specific options are ignored on Cedar builds.\n");
+    }
+
+    AllwinnerV4L2Display::InputMode input_mode =
+        (udp_port >= 0) ? AllwinnerV4L2Display::InputMode::UDP
+                        : AllwinnerV4L2Display::InputMode::StdIn;
+
+    uint32_t cedar_width = mode_width ? mode_width : 1280;
+    uint32_t cedar_height = mode_height ? mode_height : 720;
+    uint32_t cedar_vrefresh = mode_vrefresh ? mode_vrefresh : 60;
+
+    AllwinnerV4L2Display display(udp_port, decode_h265, cedar_width, cedar_height, cedar_vrefresh);
+    display.override_input_mode(input_mode);
+
+    int cedar_drm_fd = -1;
+    const char* fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
+    if (fd_socket) {
+        cedar_drm_fd = receive_fd_from_socket(fd_socket);
+        if (cedar_drm_fd < 0) {
+            fprintf(stderr, "Failed to receive DRM FD from socket %s\n", fd_socket);
+            return 1;
+        }
+        display.set_external_drm_fd(cedar_drm_fd, true);
+    }
+
+    if (!display.start()) {
+        fprintf(stderr, "Failed to start Cedar decoder/display pipeline.\n");
+        display.stop();
+        return 1;
+    }
+
+    while (!signal_flag) {
+        sleep(1);
+    }
+
+    display.stop();
+    return 0;
 #endif
 }

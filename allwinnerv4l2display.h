@@ -18,7 +18,18 @@ extern "C" {
  */
 class AllwinnerV4L2Display {
 public:
-  AllwinnerV4L2Display(int udp_port, bool h265);
+  enum class InputMode {
+    UDP,
+    StdIn
+  };
+
+  AllwinnerV4L2Display(int udp_port,
+                       bool h265,
+                       uint32_t mode_width = 1280,
+                       uint32_t mode_height = 720,
+                       uint32_t mode_vrefresh = 60);
+  void set_external_drm_fd(int fd, bool take_ownership);
+  void override_input_mode(InputMode mode);
   ~AllwinnerV4L2Display();
 
   // Start the decoding/ display thread. Returns true on success.
@@ -38,8 +49,16 @@ private:
   std::thread m_thread;
 
   int m_sock{-1};
+  int m_input_fd{-1};
   int m_v4l2_fd{-1};
   int m_drm_fd{-1};
+  bool m_take_ownership_of_drm_fd{true};
+  InputMode m_input_mode{InputMode::UDP};
+  bool m_drm_prepared{false};
+
+  uint32_t m_mode_width{1280};
+  uint32_t m_mode_height{720};
+  uint32_t m_mode_vrefresh{60};
 
   struct modeset_output m_output{};
 
