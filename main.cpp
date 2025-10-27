@@ -24,6 +24,7 @@
 #include <sys/mman.h>
 #include <string>
 #include <vector>
+#include <limits>
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -57,6 +58,54 @@ extern "C" {
 #include "allwinnerv4l2display.h"
 #include "display_host.h"
 #endif
+
+struct ScreenMode {
+    uint16_t width;
+    uint16_t height;
+    uint32_t vrefresh;
+};
+
+static bool parse_screen_mode(const char *value, ScreenMode &out) {
+    if (!value) {
+        return false;
+    }
+    unsigned int width = 0;
+    unsigned int height = 0;
+    unsigned int refresh = 0;
+    if (sscanf(value, "%ux%u@%u", &width, &height, &refresh) != 3) {
+        return false;
+    }
+    if (width == 0 || height == 0 || refresh == 0 || width > std::numeric_limits<uint16_t>::max() ||
+        height > std::numeric_limits<uint16_t>::max()) {
+        return false;
+    }
+    out.width = static_cast<uint16_t>(width);
+    out.height = static_cast<uint16_t>(height);
+    out.vrefresh = refresh;
+    return true;
+}
+
+static bool looks_like_annexb_stream(const uint8_t *data, size_t size) {
+    if (!data || size < 64) {
+        return false;
+    }
+    size_t start_code_count = 0;
+    for (size_t i = 0; i + 3 < size; ++i) {
+        if (data[i] == 0x00 && data[i + 1] == 0x00) {
+            if (data[i + 2] == 0x01) {
+                ++start_code_count;
+                i += 2;
+            } else if (data[i + 2] == 0x00 && i + 4 < size && data[i + 3] == 0x01) {
+                ++start_code_count;
+                i += 3;
+            }
+        }
+        if (start_code_count >= 4) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // This buffer size has no effect on the latency -
 // 5MB should be enough, no matter how high bitrate the stream is.
@@ -1101,10 +1150,12 @@ static bool select_color_cycle_plane(int fd, struct modeset_output *out, uint32_
 
 // main
 
-int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vrefresh) {
-    uint32_t width = mode_width ? mode_width : 1280;
-    uint32_t height = mode_height ? mode_height : 720;
-    uint32_t vrefresh = mode_vrefresh ? mode_vrefresh : 60;
+
+int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
+    if (modes.empty()) {
+        fprintf(stderr, "stdin NV12 mode requires at least one screen mode candidate.\n");
+        return 1;
+    }
 
     const char *fd_socket = getenv("FPVUE_DRM_FD_SOCKET");
     int drm_fd = -1;
@@ -1123,12 +1174,7 @@ int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vref
         }
     }
 
-    struct modeset_output *out = static_cast<struct modeset_output *>(calloc(1, sizeof(*out)));
-    if (!out) {
-        perror("calloc modeset_output");
-        close(drm_fd);
-        return 1;
-    }
+    struct modeset_output *out = nullptr;
 
     struct RawNv12Buffer {
         uint32_t fb_id{0};
@@ -1160,27 +1206,59 @@ int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vref
 
     bool prepared = false;
     int exit_code = 0;
-    uint32_t frame_width = width;
-    uint32_t frame_height = height;
+    uint32_t frame_width = modes.front().width;
+    uint32_t frame_height = modes.front().height;
     size_t frame_size = 0;
     size_t buffer_index = 0;
     bool eof = false;
+    bool encoded_input_warning_emitted = false;
 
-    if (modeset_prepare(drm_fd,
-                        out,
-                        static_cast<uint16_t>(width),
-                        static_cast<uint16_t>(height),
-                        vrefresh,
-                        DRM_FORMAT_NV12,
-                        MODESET_PLANE_TYPE_PRIMARY) != 0) {
-        fprintf(stderr, "Failed to prepare DRM output for stdin NV12 mode.\n");
+    ScreenMode selected_mode = modes.front();
+    if (modes.size() > 1) {
+        printf("Trying %zu screen mode candidates for stdin NV12 input.\n", modes.size());
+    }
+    for (size_t idx = 0; idx < modes.size(); ++idx) {
+        const ScreenMode &candidate = modes[idx];
+        struct modeset_output *candidate_out = static_cast<struct modeset_output *>(calloc(1, sizeof(*candidate_out)));
+        if (!candidate_out) {
+            perror("calloc modeset_output");
+            exit_code = 1;
+            goto finish;
+        }
+        if (modeset_prepare(drm_fd,
+                            candidate_out,
+                            candidate.width,
+                            candidate.height,
+                            candidate.vrefresh,
+                            DRM_FORMAT_NV12,
+                            MODESET_PLANE_TYPE_PRIMARY) == 0) {
+            out = candidate_out;
+            prepared = true;
+            selected_mode = candidate;
+            break;
+        }
+
+        fprintf(stderr,
+                "Failed to prepare DRM output for stdin NV12 mode using %ux%u@%u%s\n",
+                candidate.width,
+                candidate.height,
+                candidate.vrefresh,
+                (idx + 1 < modes.size()) ? "; trying next candidate" : "");
+        if (candidate_out->mode_blob_id || candidate_out->video_plane.id || candidate_out->video_request || candidate_out->saved_crtc) {
+            modeset_cleanup(drm_fd, candidate_out);
+        } else {
+            free(candidate_out);
+        }
+    }
+
+    if (!prepared) {
+        fprintf(stderr, "Unable to configure any of the requested screen modes for stdin NV12 input.\n");
         exit_code = 1;
         goto finish;
     }
-    prepared = true;
 
-    frame_width = out->video_frm_width ? out->video_frm_width : width;
-    frame_height = out->video_frm_height ? out->video_frm_height : height;
+    frame_width = out->video_frm_width ? out->video_frm_width : selected_mode.width;
+    frame_height = out->video_frm_height ? out->video_frm_height : selected_mode.height;
     if (frame_width == 0 || frame_height == 0) {
         fprintf(stderr,
                 "Invalid frame dimensions for stdin NV12 mode (%ux%u).\n",
@@ -1191,7 +1269,7 @@ int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vref
     }
 
     frame_size = static_cast<size_t>(frame_width) * frame_height * 3 / 2;
-    printf("Rendering raw NV12 stream %ux%u@%u from stdin.\n", frame_width, frame_height, vrefresh);
+    printf("Rendering raw NV12 stream %ux%u@%u from stdin.\n", frame_width, frame_height, selected_mode.vrefresh);
 
     buffers.assign(3, RawNv12Buffer{});
     for (auto &buf : buffers) {
@@ -1286,6 +1364,11 @@ int run_stdin_nv12(uint32_t mode_width, uint32_t mode_height, uint32_t mode_vref
         if (remaining > 0 || eof) {
             break;
         }
+        if (!encoded_input_warning_emitted && looks_like_annexb_stream(dst, frame_size)) {
+            fprintf(stderr,
+                    "Input appears to contain Annex B encoded video (e.g. H.264/H.265). --stdin-nv12 expects raw NV12 frames. Ensure your pipeline decodes the stream before piping it into fpvue (for example, add '... ! decodebin ! videoconvert ! video/x-raw,format=NV12 ! fdsink fd=1').\n");
+            encoded_input_warning_emitted = true;
+        }
         extra_modeset_set_fb(drm_fd, out, &out->video_plane, buf.fb_id);
         buffer_index = (buffer_index + 1) % buffers.size();
     }
@@ -1295,31 +1378,33 @@ finish:
         destroy_buffer(buf);
     }
 
-    if (prepared && out->saved_crtc) {
-        drmModeSetCrtc(drm_fd,
-                       out->saved_crtc->crtc_id,
-                       out->saved_crtc->buffer_id,
-                       out->saved_crtc->x,
-                       out->saved_crtc->y,
-                       &out->connector.id,
-                       1,
-                       &out->saved_crtc->mode);
-        drmModeFreeCrtc(out->saved_crtc);
-        out->saved_crtc = nullptr;
-    }
-    if (prepared && out->video_request) {
-        drmModeAtomicFree(out->video_request);
-        out->video_request = nullptr;
-    }
-    if (prepared) {
+    if (out) {
+        if (prepared && out->saved_crtc) {
+            drmModeSetCrtc(drm_fd,
+                           out->saved_crtc->crtc_id,
+                           out->saved_crtc->buffer_id,
+                           out->saved_crtc->x,
+                           out->saved_crtc->y,
+                           &out->connector.id,
+                           1,
+                           &out->saved_crtc->mode);
+            drmModeFreeCrtc(out->saved_crtc);
+            out->saved_crtc = nullptr;
+        }
+        if (prepared && out->video_request) {
+            drmModeAtomicFree(out->video_request);
+            out->video_request = nullptr;
+        }
         modeset_cleanup(drm_fd, out);
-    } else {
-        free(out);
+        out = nullptr;
     }
 
-    close(drm_fd);
+    if (drm_fd >= 0) {
+        close(drm_fd);
+    }
     return exit_code;
 }
+
 
 int run_color_cycle(uint16_t mode_width, uint16_t mode_height, uint32_t mode_vrefresh){
     int ret;
@@ -1502,6 +1587,8 @@ int main(int argc, char **argv)
         uint16_t mode_width = 0;
         uint16_t mode_height = 0;
         uint32_t mode_vrefresh = 0;
+        std::vector<ScreenMode> screen_modes;
+        bool screen_mode_parse_failed = false;
 	// Load console arguments
 	__BeginParseConsoleArguments__(printHelp) 
 	
@@ -1509,13 +1596,21 @@ int main(int argc, char **argv)
 		listen_port = atoi(__ArgValue);
 		continue;
 	}
-	__OnArgument("--screen-mode") {
-		const char* mode = __ArgValue;
-		mode_width = atoi(strtok((char*)mode, "x"));
-		mode_height = atoi(strtok(NULL, "@"));
-		mode_vrefresh = atoi(strtok(NULL, "@"));
-		continue;
-	}
+        __OnArgument("--screen-mode") {
+                ScreenMode parsed{};
+                if (!parse_screen_mode(__ArgValue, parsed)) {
+                        fprintf(stderr, "Invalid --screen-mode value '%s'. Expected format WIDTHxHEIGHT@REFRESH.\n", __ArgValue);
+                        screen_mode_parse_failed = true;
+                } else {
+                        screen_modes.push_back(parsed);
+                        if (screen_modes.size() == 1) {
+                                mode_width = parsed.width;
+                                mode_height = parsed.height;
+                                mode_vrefresh = parsed.vrefresh;
+                        }
+                }
+                continue;
+        }
 
     __OnArgument("--h265") {
         decode_h265=true;
@@ -1557,7 +1652,22 @@ int main(int argc, char **argv)
         continue;
     }
 
-	__EndParseConsoleArguments__
+        __EndParseConsoleArguments__
+
+    if (screen_mode_parse_failed) {
+        return 1;
+    }
+
+    if (screen_modes.empty()) {
+        ScreenMode fallback{};
+        fallback.width = mode_width ? mode_width : 1280;
+        fallback.height = mode_height ? mode_height : 720;
+        fallback.vrefresh = mode_vrefresh ? mode_vrefresh : 60;
+        screen_modes.push_back(fallback);
+        mode_width = fallback.width;
+        mode_height = fallback.height;
+        mode_vrefresh = fallback.vrefresh;
+    }
 
     // X20 force and x20 auto are exclusive
     if(x20_auto && x20_force){
@@ -1588,7 +1698,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "--stdin-nv12 overrides --aw-display Cedar path.\n");
             aw_display = false;
         }
-        return run_stdin_nv12(mode_width, mode_height, mode_vrefresh);
+        return run_stdin_nv12(screen_modes);
     }
     if(color_cycle){
         return run_color_cycle(mode_width,mode_height,mode_vrefresh);
