@@ -1671,9 +1671,9 @@ int main(int argc, char **argv)
 
     //read_rtp_stream(listen_port, packet, nal_buffer);
     if(udp_port==-1){
-        read_filesrc_stream((void**)packet);
+        read_filesrc_stream(&packet);
     }else{
-        read_gstreamerpipe_stream((void**)packet);
+        read_gstreamerpipe_stream(&packet);
     }
 
     ////////////////////////////////////////////// MPI CLEANUP
