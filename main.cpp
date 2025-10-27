@@ -1211,6 +1211,7 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
     size_t frame_size = 0;
     size_t buffer_index = 0;
     bool eof = false;
+    bool encoded_input_warning_emitted = false;
 
     ScreenMode selected_mode = modes.front();
     if (modes.size() > 1) {
@@ -1363,11 +1364,10 @@ int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
         if (remaining > 0 || eof) {
             break;
         }
-        if (looks_like_annexb_stream(dst, frame_size)) {
+        if (!encoded_input_warning_emitted && looks_like_annexb_stream(dst, frame_size)) {
             fprintf(stderr,
                     "Input appears to contain Annex B encoded video (e.g. H.264/H.265). --stdin-nv12 expects raw NV12 frames. Ensure your pipeline decodes the stream before piping it into fpvue (for example, add '... ! decodebin ! videoconvert ! video/x-raw,format=NV12 ! fdsink fd=1').\n");
-            exit_code = 1;
-            break;
+            encoded_input_warning_emitted = true;
         }
         extra_modeset_set_fb(drm_fd, out, &out->video_plane, buf.fb_id);
         buffer_index = (buffer_index + 1) % buffers.size();
