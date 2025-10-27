@@ -6,6 +6,8 @@ project(fpvue)
 
 set(CMAKE_CXX_STANDARD 17)
 
+include(CheckIncludeFileCXX)
+
 add_compile_options("-Wno-address-of-packed-member")
 add_compile_options("-Wno-address-of-packed-member")
 
@@ -39,6 +41,30 @@ else()
 endif()
 
 target_link_libraries(${PROJECT_NAME} pthread m ) #-lstringlib
+
+check_include_file_cxx("OMX_Core.h" HAVE_OMX_CORE_H)
+if(HAVE_OMX_CORE_H)
+  message(STATUS "Detected OMX_Core.h - enabling Cedar OpenMAX IL support")
+  target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_AW_OMX=1)
+  find_library(OMX_CORE_LIB OmxCore)
+  find_library(AW_OMXIL_LIB aw_omxil)
+  find_library(CEDARC_LIB cedarc)
+  find_library(ION_LIB ion)
+  set(CEDAR_LIBS ${OMX_CORE_LIB} ${AW_OMXIL_LIB} ${CEDARC_LIB} ${ION_LIB})
+  list(REMOVE_ITEM CEDAR_LIBS "CEDAR_LIBS-NOTFOUND")
+  if(NOT OMX_CORE_LIB OR NOT AW_OMXIL_LIB OR NOT CEDARC_LIB)
+    message(WARNING "Missing Cedar OpenMAX IL libraries (OmxCore/aw_omxil/cedarc). Cedar path will be disabled.")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_AW_OMX=0)
+  else()
+    target_link_libraries(${PROJECT_NAME} ${OMX_CORE_LIB} ${AW_OMXIL_LIB} ${CEDARC_LIB})
+    if(ION_LIB)
+      target_link_libraries(${PROJECT_NAME} ${ION_LIB})
+    endif()
+  endif()
+else()
+  message(STATUS "OMX_Core.h not found - Cedar OpenMAX IL support disabled")
+  target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_AW_OMX=0)
+endif()
 
 # experiment gstreamer
 find_package(PkgConfig REQUIRED)
