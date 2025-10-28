@@ -1273,7 +1273,7 @@ int run_stdin_nv_mode(const std::vector<ScreenMode> &modes, const NvStdinConfig 
         if (!candidate_out) {
             fprintf(stderr,
                     "Failed to allocate modeset output structure for stdin %s mode.\n",
-                    format_name);
+                    config.mode_name);
             exit_code = 1;
             break;
         }
@@ -1504,11 +1504,11 @@ finish:
 }
 
 int run_stdin_nv12(const std::vector<ScreenMode> &modes) {
-    return run_stdin_raw(modes, "NV12", "FPVUE_STDIN_NV12", DRM_FORMAT_NV12);
+    return run_stdin_nv_mode(modes, kNv12Config);
 }
 
 int run_stdin_nv21(const std::vector<ScreenMode> &modes) {
-    return run_stdin_raw(modes, "NV21", "FPVUE_STDIN_NV21", DRM_FORMAT_NV21);
+    return run_stdin_nv_mode(modes, kNv21Config);
 }
 
 
