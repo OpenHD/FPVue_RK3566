@@ -131,9 +131,11 @@ void memcpy_threaded(void* dest,void* src, int len,int n_threads){
     struct memcpy_args_t memcpyArgs[100];
     int consumed=0;
     int chunck=len/(n_threads);
+    char *src_bytes = static_cast<char *>(src);
+    char *dst_bytes = static_cast<char *>(dest);
     for(int i=0;i<n_threads;i++){
-        memcpyArgs[i].src=src+consumed;
-        memcpyArgs[i].dst=dest+consumed;
+        memcpyArgs[i].src = src_bytes + consumed;
+        memcpyArgs[i].dst = dst_bytes + consumed;
         int this_thread_len;
         if(i==n_threads-1){
             // might not be even
