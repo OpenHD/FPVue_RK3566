@@ -132,8 +132,8 @@ void memcpy_threaded(void* dest,void* src, int len,int n_threads){
     int consumed=0;
     int chunck=len/(n_threads);
     for(int i=0;i<n_threads;i++){
-        memcpyArgs[i].src=src+consumed;
-        memcpyArgs[i].dst=dest+consumed;
+        memcpyArgs[i].src=reinterpret_cast<uint8_t*>(src)+consumed;
+        memcpyArgs[i].dst=reinterpret_cast<uint8_t*>(dest)+consumed;
         int this_thread_len;
         if(i==n_threads-1){
             // might not be even

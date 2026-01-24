@@ -608,7 +608,15 @@ void *__FRAME_THREAD__(void *param)
                             meta.header_size = sizeof(meta);
                             meta.width = mpp_frame_get_width(frame);
                             meta.height = mpp_frame_get_height(frame);
-                            meta.fourcc = (fmt == MPP_FMT_YUV420SP_10BIT) ? DRM_FORMAT_NV12_10LE40 : DRM_FORMAT_NV12;
+                            if (fmt == MPP_FMT_YUV420SP_10BIT) {
+#ifdef DRM_FORMAT_NV12_10LE40
+                                meta.fourcc = DRM_FORMAT_NV12_10LE40;
+#else
+                                meta.fourcc = DRM_FORMAT_NV12;
+#endif
+                            } else {
+                                meta.fourcc = DRM_FORMAT_NV12;
+                            }
                             meta.num_planes = 2;
                             meta.fd_count = 1;
                             RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
