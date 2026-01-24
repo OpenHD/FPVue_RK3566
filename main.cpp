@@ -103,6 +103,7 @@ int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
 bool enable_realtime=true;
+bool force_realtime=false;
 int dmabuf_sock=-1;
 const char* dmabuf_socket_path="/tmp/fpvue_link";
 struct TSAccumulator m_decoding_latency;
@@ -1179,6 +1180,7 @@ void printHelp() {
     "    -i [plane_ids]   - Ignore DRM plane id(s), comma-separated. Can be repeated\n"
     "\n"
     "    --no-rt          - Disable realtime thread priorities (reduces UI lag under load)\n"
+    "    --rt             - Force realtime thread priorities (overrides rmode 8 default)\n"
     "\n"
     "\n", __DATE__
   );
@@ -1356,6 +1358,11 @@ int main(int argc, char **argv)
         enable_realtime = false;
         continue;
     }
+    __OnArgument("--rt") {
+        force_realtime = true;
+        enable_realtime = true;
+        continue;
+    }
 
 	__EndParseConsoleArguments__
 
@@ -1364,6 +1371,11 @@ int main(int argc, char **argv)
         printf("Cannot use x20 auto and force at the same time\n");
         assert(false);
     }
+
+    if (develop_rendering_mode == 8 && !force_realtime) {
+        enable_realtime = false;
+    }
+    printf("Realtime scheduling %s\n", enable_realtime ? "enabled" : "disabled");
 
 	if (enable_osd == 0 ) {
 		video_zpos = 4;
