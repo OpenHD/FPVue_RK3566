@@ -184,7 +184,7 @@ struct DmabufFrameInfo {
     uint32_t fd_count;
     uint32_t strides[4];
     uint32_t offsets[4];
-    uint64_t modifier;
+    uint64_t modifiers[4];
     uint64_t pts_ms;
 };
 
@@ -634,7 +634,8 @@ void *__FRAME_THREAD__(void *param)
                             meta.strides[1] = hor_stride;
                             meta.offsets[0] = 0;
                             meta.offsets[1] = hor_stride * ver_stride;
-                            meta.modifier = DRM_FORMAT_MOD_LINEAR;
+                            meta.modifiers[0] = DRM_FORMAT_MOD_LINEAR;
+                            meta.modifiers[1] = meta.modifiers[0];
                             meta.pts_ms = feed_data_ts;
                             send_dmabuf_frame(info.fd, &meta);
                         }
