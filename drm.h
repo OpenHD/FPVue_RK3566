@@ -91,6 +91,7 @@ int modeset_find_crtc(int fd, drmModeRes *res, drmModeConnector *conn, struct mo
 const char* drm_fourcc_to_string(uint32_t fourcc);
 
 int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *plane_out, uint32_t plane_format);
+void modeset_set_ignored_planes(const uint32_t *ids, size_t count);
 
 void modeset_drm_object_fini(struct drm_object *obj);
 

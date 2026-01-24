@@ -15,6 +15,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <vector>
+#include <string>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -103,6 +105,7 @@ struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
 struct TSAccumulator m_drm_mode_set_plane_latency;
+static std::vector<uint32_t> ignored_plane_ids;
 void start_sync(int fd,bool write){
     struct dma_buf_sync sync;
     sync.flags = DMA_BUF_SYNC_START | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ);
@@ -1050,8 +1053,26 @@ void printHelp() {
     "\n"
     "    --x20-auto      - auto detect x20 or not as air, works with x20 AND rpi\n"
     "\n"
+    "    -i [plane_ids]   - Ignore DRM plane id(s), comma-separated. Can be repeated\n"
+    "\n"
     "\n", __DATE__
   );
+}
+
+static void add_ignored_planes(const char* value) {
+    if (!value || value[0] == '\0') {
+        return;
+    }
+    std::string temp = value;
+    char* token = strtok(temp.data(), ",");
+    while (token != NULL) {
+        char* endptr = NULL;
+        unsigned long id = strtoul(token, &endptr, 10);
+        if (endptr != token) {
+            ignored_plane_ids.push_back(static_cast<uint32_t>(id));
+        }
+        token = strtok(NULL, ",");
+    }
 }
 
 void set_control_verbose(MppApi * mpi,  MppCtx ctx,MpiCmd control,RK_U32 enable){
@@ -1119,6 +1140,10 @@ int main(int argc, char **argv)
 		continue;
 	}
 
+	__OnArgument("-i") {
+		add_ignored_planes(__ArgValue);
+		continue;
+	}
 	__OnArgument("--mavlink-port") {
 		mavlink_port = atoi(__ArgValue);
 		continue;
@@ -1213,6 +1238,10 @@ int main(int argc, char **argv)
 
 	if (enable_osd == 0 ) {
 		video_zpos = 4;
+	}
+
+	if (!ignored_plane_ids.empty()) {
+		modeset_set_ignored_planes(ignored_plane_ids.data(), ignored_plane_ids.size());
 	}
 
     // H264 or H265

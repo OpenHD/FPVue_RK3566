@@ -18,6 +18,33 @@
 #include <rockchip/rk_mpi.h>
 #include <assert.h>
 
+#define MAX_IGNORED_PLANES 32
+static uint32_t g_ignored_plane_ids[MAX_IGNORED_PLANES];
+static size_t g_ignored_plane_count = 0;
+
+void modeset_set_ignored_planes(const uint32_t *ids, size_t count)
+{
+	if (!ids || count == 0) {
+		g_ignored_plane_count = 0;
+		return;
+	}
+	if (count > MAX_IGNORED_PLANES) {
+		count = MAX_IGNORED_PLANES;
+	}
+	memcpy(g_ignored_plane_ids, ids, count * sizeof(uint32_t));
+	g_ignored_plane_count = count;
+}
+
+static bool is_plane_ignored(uint32_t plane_id)
+{
+	for (size_t i = 0; i < g_ignored_plane_count; i++) {
+		if (g_ignored_plane_ids[i] == plane_id) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int modeset_open(int *out, const char *node)
 {
 	int fd, ret;
@@ -233,6 +260,11 @@ int modeset_find_plane(int fd, struct modeset_output *out, struct drm_object *pl
 		if (!plane) {
 			fprintf(stderr, "drmModeGetPlane(%u) failed: %s\n", plane_id,
 					strerror(errno));
+			continue;
+		}
+
+		if (is_plane_ignored(plane_id)) {
+			drmModeFreePlane(plane);
 			continue;
 		}
 
