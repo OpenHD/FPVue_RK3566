@@ -102,6 +102,7 @@ bool decode_h265=false;
 int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
+bool enable_realtime=true;
 int dmabuf_sock=-1;
 const char* dmabuf_socket_path="/tmp/fpvue_link";
 struct TSAccumulator m_decoding_latency;
@@ -562,7 +563,9 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
 
 void *__FRAME_THREAD__(void *param)
 {
-    SchedulingHelper::set_thread_params_max_realtime("FRAME_THREAD",SchedulingHelper::PRIORITY_REALTIME_MID);
+    if (enable_realtime) {
+        SchedulingHelper::set_thread_params_max_realtime("FRAME_THREAD",SchedulingHelper::PRIORITY_REALTIME_MID);
+    }
 	int ret;
 	int i;	
 	MppFrame  frame  = NULL;
@@ -682,7 +685,9 @@ void *__DISPLAY_THREAD__(void *param)
 {
     // With the proper rendering mode(s) this thread
     // doesn't hog the CPU
-    SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+    if (enable_realtime) {
+        SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+    }
 	int ret;	
 	int frame_counter = 0;
 	uint64_t latency_avg[200];
@@ -1029,7 +1034,9 @@ void read_gstreamerpipe_stream(MppPacket *packet){
         // Let the gst pull thread run at quite high priority
         static bool first= false;
         if(first){
-            SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+            if (enable_realtime) {
+                SchedulingHelper::set_thread_params_max_realtime("DisplayThread",SchedulingHelper::PRIORITY_REALTIME_LOW);
+            }
             first= false;
         }
         if(!x20_force && x20_auto){
@@ -1170,6 +1177,8 @@ void printHelp() {
     "    --x20-auto      - auto detect x20 or not as air, works with x20 AND rpi\n"
     "\n"
     "    -i [plane_ids]   - Ignore DRM plane id(s), comma-separated. Can be repeated\n"
+    "\n"
+    "    --no-rt          - Disable realtime thread priorities (reduces UI lag under load)\n"
     "\n"
     "\n", __DATE__
   );
@@ -1341,6 +1350,10 @@ int main(int argc, char **argv)
     __OnArgument("--x20-auto") {
         const char* mode = __ArgValue;
         x20_auto= true;
+        continue;
+    }
+    __OnArgument("--no-rt") {
+        enable_realtime = false;
         continue;
     }
 
