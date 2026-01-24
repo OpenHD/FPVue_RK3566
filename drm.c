@@ -69,6 +69,8 @@ int modeset_open(int *out, const char *node)
 		return ret;
 	}
 
+	fprintf(stderr, "drm: is_master=%d euid=%d egid=%d\n", drmIsMaster(fd), geteuid(), getegid());
+
 	if (drmGetCap(fd, DRM_CAP_DUMB_BUFFER, &cap) < 0 || !cap) {
 		fprintf(stderr, "drm device '%s' does not support dumb buffers\n",
 			node);
@@ -595,7 +597,8 @@ int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq
 	flags = DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET;
 	ret = drmModeAtomicCommit(fd, req, flags, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "test-only atomic commit failed for plane %d: %m\n", plane->id);
+		fprintf(stderr, "test-only atomic commit failed for plane %d: %m (is_master=%d euid=%d egid=%d)\n",
+			plane->id, drmIsMaster(fd), geteuid(), getegid());
 		return ret;
 	}
 
@@ -603,7 +606,8 @@ int modeset_perform_modeset(int fd, struct modeset_output *out, drmModeAtomicReq
     flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 	ret = drmModeAtomicCommit(fd, req, flags, NULL);
 	if (ret < 0)
-		fprintf(stderr, "modeset atomic commit failed for plane %d: %m\n", plane->id);
+		fprintf(stderr, "modeset atomic commit failed for plane %d: %m (is_master=%d euid=%d egid=%d)\n",
+			plane->id, drmIsMaster(fd), geteuid(), getegid());
 
 	return ret;
 }

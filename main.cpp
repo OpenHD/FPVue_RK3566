@@ -103,7 +103,7 @@ int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
 int dmabuf_sock=-1;
-const char* dmabuf_socket_path="/tmp/fpvue-dmabuf.sock";
+const char* dmabuf_socket_path="/tmp/fpvue_link";
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -334,8 +334,10 @@ void initialize_output_buffers(MppFrame  frame){
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_EXT_BUF_GROUP, mpi.frm_grp);
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_INFO_CHANGE_READY, NULL);
 
-    ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
-    assert(ret >= 0);
+    if (develop_rendering_mode != 8) {
+        ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
+        assert(ret >= 0);
+    }
 }
 
 // 'Live buffer hack'
@@ -437,14 +439,16 @@ void initialize_output_buffers_ion(MppFrame  frame){
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_EXT_BUF_GROUP, mpi.frm_grp);
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_INFO_CHANGE_READY, NULL);
 
-    ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
-    drmModeSetCrtc(
-            drm_fd, output_list->saved_crtc->crtc_id, mpi.frame_to_drm[0].fb_id,
-            0, 0,
-            &output_list->connector.id,
-            1,
-            &output_list->saved_crtc->mode);
-    assert(ret >= 0);
+    if (develop_rendering_mode != 8) {
+        ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
+        drmModeSetCrtc(
+                drm_fd, output_list->saved_crtc->crtc_id, mpi.frame_to_drm[0].fb_id,
+                0, 0,
+                &output_list->connector.id,
+                1,
+                &output_list->saved_crtc->mode);
+        assert(ret >= 0);
+    }
 
 }
 
@@ -542,8 +546,10 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_EXT_BUF_GROUP, mpi.frm_grp);
     ret = mpi.mpi->control(mpi.ctx, MPP_DEC_SET_INFO_CHANGE_READY, NULL);
 
-    ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
-    assert(ret >= 0);
+    if (develop_rendering_mode != 8) {
+        ret = modeset_perform_modeset(drm_fd, output_list, output_list->video_request, &output_list->video_plane, mpi.frame_to_drm[0].fb_id, output_list->video_frm_width, output_list->video_frm_height, video_zpos);
+        assert(ret >= 0);
+    }
 }
 
 // __FRAME_THREAD__
