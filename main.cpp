@@ -214,6 +214,9 @@ void init_dmabuf_socket() {
 }
 
 void send_dmabuf_frame(int prime_fd, const DmabufFrameInfo *info) {
+    if (dmabuf_sock < 0) {
+        init_dmabuf_socket();
+    }
     if (dmabuf_sock < 0 || prime_fd < 0 || info == nullptr) {
         return;
     }
