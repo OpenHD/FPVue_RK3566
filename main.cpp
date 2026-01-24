@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <vector>
 #include <string>
+#include <sys/un.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -101,6 +102,8 @@ bool decode_h265=false;
 int gst_udp_port=-1;
 bool x20_force=false;
 bool x20_auto=false;
+int dmabuf_sock=-1;
+const char* dmabuf_socket_path="/tmp/fpvue-dmabuf.sock";
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -168,6 +171,73 @@ void map_copy_unmap(int fd_src,int fd_dst,int memory_size){
     accumulate_and_print("map_copy_unmap",map_copy_unmap_elapsed,&m_map_copy_unmap_accumulator);
     //free(big_buff);
     free(test_buffer);
+}
+
+struct DmabufFrameInfo {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t header_size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t fourcc;
+    uint32_t num_planes;
+    uint32_t fd_count;
+    uint32_t strides[4];
+    uint32_t offsets[4];
+    uint64_t modifier;
+    uint64_t pts_ms;
+};
+
+void init_dmabuf_socket() {
+    if (dmabuf_sock >= 0) {
+        return;
+    }
+    dmabuf_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (dmabuf_sock < 0) {
+        printf("dmabuf socket() failed: %s\n", strerror(errno));
+        return;
+    }
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, dmabuf_socket_path, sizeof(addr.sun_path) - 1);
+    if (connect(dmabuf_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        printf("dmabuf connect(%s) failed: %s\n", dmabuf_socket_path, strerror(errno));
+        close(dmabuf_sock);
+        dmabuf_sock = -1;
+        return;
+    }
+    int flags = fcntl(dmabuf_sock, F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(dmabuf_sock, F_SETFL, flags | O_NONBLOCK);
+    }
+}
+
+void send_dmabuf_frame(int prime_fd, const DmabufFrameInfo *info) {
+    if (dmabuf_sock < 0 || prime_fd < 0 || info == nullptr) {
+        return;
+    }
+    struct msghdr msg;
+    struct iovec iov;
+    char cmsgbuf[CMSG_SPACE(sizeof(int))];
+    memset(&msg, 0, sizeof(msg));
+    memset(cmsgbuf, 0, sizeof(cmsgbuf));
+    iov.iov_base = (void *)info;
+    iov.iov_len = sizeof(*info);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cmsgbuf;
+    msg.msg_controllen = sizeof(cmsgbuf);
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+    memcpy(CMSG_DATA(cmsg), &prime_fd, sizeof(int));
+    if (sendmsg(dmabuf_sock, &msg, MSG_DONTWAIT) < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS) {
+            // Best effort; drop frame on error.
+        }
+    }
 }
 
 void copy_mpp_buff(MppBuffer* src,MppBuffer* dst){
@@ -525,7 +595,33 @@ void *__FRAME_THREAD__(void *param)
                     accumulate_and_print("Decode",decoding_latency,&m_decoding_latency);
                     //print_time_ms("Decode",decoding_latency);
 
-                    if(develop_rendering_mode==10){
+                    if(develop_rendering_mode==8){
+                        MppFrameFormat fmt = mpp_frame_get_fmt(frame);
+                        if (fmt == MPP_FMT_YUV420SP || fmt == MPP_FMT_YUV420SP_10BIT) {
+                            MppBufferInfo info;
+                            ret = mpp_buffer_info_get(buffer, &info);
+                            assert(!ret);
+                            DmabufFrameInfo meta;
+                            memset(&meta, 0, sizeof(meta));
+                            meta.magic = 0x46505645; // "FPVE"
+                            meta.version = 1;
+                            meta.header_size = sizeof(meta);
+                            meta.width = mpp_frame_get_width(frame);
+                            meta.height = mpp_frame_get_height(frame);
+                            meta.fourcc = (fmt == MPP_FMT_YUV420SP_10BIT) ? DRM_FORMAT_NV12_10LE40 : DRM_FORMAT_NV12;
+                            meta.num_planes = 2;
+                            meta.fd_count = 1;
+                            RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
+                            RK_U32 ver_stride = mpp_frame_get_ver_stride(frame);
+                            meta.strides[0] = hor_stride;
+                            meta.strides[1] = hor_stride;
+                            meta.offsets[0] = 0;
+                            meta.offsets[1] = hor_stride * ver_stride;
+                            meta.modifier = DRM_FORMAT_MOD_LINEAR;
+                            meta.pts_ms = feed_data_ts;
+                            send_dmabuf_frame(info.fd, &meta);
+                        }
+                    } else if(develop_rendering_mode==10){
                         // Never commit anything in the display thread
                     }else{
                         // find fb_id by frame prime_fd
@@ -1049,6 +1145,8 @@ void printHelp() {
     "\n"
     "    --rmode      - different rendering modes for development \n"
     "\n"
+    "    --rmode 8    - export latest decoded frame as DMA-BUF over unix socket (/tmp/fpvue-dmabuf.sock)\n"
+    "\n"
     "    --x20-force      - forces specific x20 fixe(s) (no autodetect), only works with x20\n"
     "\n"
     "    --x20-auto      - auto detect x20 or not as air, works with x20 AND rpi\n"
@@ -1272,6 +1370,10 @@ int main(int argc, char **argv)
 	output_list = (struct modeset_output *)malloc(sizeof(struct modeset_output));
 	ret = modeset_prepare(drm_fd, output_list, mode_width, mode_height, mode_vrefresh);
 	assert(!ret);
+
+    if (develop_rendering_mode == 8) {
+        init_dmabuf_socket();
+    }
 	
 	////////////////////////////////// MPI SETUP
 	MppPacket packet;
@@ -1394,6 +1496,10 @@ int main(int argc, char **argv)
 	drmModeAtomicFree(output_list->osd_request);
 	modeset_cleanup(drm_fd, output_list);
 	close(drm_fd);
+    if (dmabuf_sock >= 0) {
+        close(dmabuf_sock);
+        dmabuf_sock = -1;
+    }
 
 	return 0;
 }
