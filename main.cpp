@@ -106,6 +106,7 @@ bool enable_realtime=true;
 bool force_realtime=false;
 int dmabuf_sock=-1;
 const char* dmabuf_socket_path="/tmp/fpvue_link";
+static uint64_t dmabuf_next_connect_ms = 0;
 struct TSAccumulator m_decoding_latency;
 // NOTE: Does not track latency to end completely
 struct TSAccumulator m_decode_and_handover_display_latency;
@@ -190,13 +191,38 @@ struct DmabufFrameInfo {
     uint64_t pts_ms;
 };
 
+static bool dmabuf_meta_matches(const DmabufFrameInfo& meta,
+                                uint32_t width,
+                                uint32_t height,
+                                uint32_t fourcc,
+                                uint32_t stride0,
+                                uint32_t stride1,
+                                uint32_t offset1,
+                                uint64_t modifier) {
+    return meta.width == width &&
+           meta.height == height &&
+           meta.fourcc == fourcc &&
+           meta.num_planes == 2 &&
+           meta.fd_count == 1 &&
+           meta.strides[0] == stride0 &&
+           meta.strides[1] == stride1 &&
+           meta.offsets[0] == 0 &&
+           meta.offsets[1] == offset1 &&
+           meta.modifiers[0] == modifier &&
+           meta.modifiers[1] == modifier;
+}
+
 void init_dmabuf_socket() {
+    const uint64_t now_ms = get_time_ms();
     if (dmabuf_sock >= 0) {
+        return;
+    }
+    if (dmabuf_next_connect_ms != 0 && now_ms < dmabuf_next_connect_ms) {
         return;
     }
     dmabuf_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (dmabuf_sock < 0) {
-        printf("dmabuf socket() failed: %s\n", strerror(errno));
+        dmabuf_next_connect_ms = now_ms + 1000;
         return;
     }
     struct sockaddr_un addr;
@@ -204,11 +230,13 @@ void init_dmabuf_socket() {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, dmabuf_socket_path, sizeof(addr.sun_path) - 1);
     if (connect(dmabuf_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        printf("dmabuf connect(%s) failed: %s\n", dmabuf_socket_path, strerror(errno));
         close(dmabuf_sock);
         dmabuf_sock = -1;
+        dmabuf_next_connect_ms = now_ms + 1000;
         return;
     }
+    int sndbuf = 64 * 1024;
+    setsockopt(dmabuf_sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
     int flags = fcntl(dmabuf_sock, F_GETFL, 0);
     if (flags >= 0) {
         fcntl(dmabuf_sock, F_SETFL, flags | O_NONBLOCK);
@@ -216,29 +244,35 @@ void init_dmabuf_socket() {
 }
 
 void send_dmabuf_frame(int prime_fd, const DmabufFrameInfo *info) {
+    struct DmabufSendCache {
+        struct msghdr msg;
+        struct iovec iov;
+        char cmsgbuf[CMSG_SPACE(sizeof(int))];
+        bool initialized = false;
+    };
+    static DmabufSendCache cache;
     if (dmabuf_sock < 0) {
         init_dmabuf_socket();
     }
     if (dmabuf_sock < 0 || prime_fd < 0 || info == nullptr) {
         return;
     }
-    struct msghdr msg;
-    struct iovec iov;
-    char cmsgbuf[CMSG_SPACE(sizeof(int))];
-    memset(&msg, 0, sizeof(msg));
-    memset(cmsgbuf, 0, sizeof(cmsgbuf));
-    iov.iov_base = (void *)info;
-    iov.iov_len = sizeof(*info);
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
-    msg.msg_control = cmsgbuf;
-    msg.msg_controllen = sizeof(cmsgbuf);
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    if (!cache.initialized) {
+        memset(&cache, 0, sizeof(cache));
+        cache.msg.msg_iov = &cache.iov;
+        cache.msg.msg_iovlen = 1;
+        cache.msg.msg_control = cache.cmsgbuf;
+        cache.msg.msg_controllen = sizeof(cache.cmsgbuf);
+        cache.initialized = true;
+    }
+    cache.iov.iov_base = (void *)info;
+    cache.iov.iov_len = sizeof(*info);
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&cache.msg);
     cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_LEN(sizeof(int));
     memcpy(CMSG_DATA(cmsg), &prime_fd, sizeof(int));
-    if (sendmsg(dmabuf_sock, &msg, MSG_DONTWAIT) < 0) {
+    if (sendmsg(dmabuf_sock, &cache.msg, MSG_DONTWAIT) < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS) {
             // Best effort; drop frame on error.
         }
@@ -614,32 +648,40 @@ void *__FRAME_THREAD__(void *param)
                             MppBufferInfo info;
                             ret = mpp_buffer_info_get(buffer, &info);
                             assert(!ret);
-                            DmabufFrameInfo meta;
-                            memset(&meta, 0, sizeof(meta));
-                            meta.magic = 0x46505645; // "FPVE"
-                            meta.version = 1;
-                            meta.header_size = sizeof(meta);
-                            meta.width = mpp_frame_get_width(frame);
-                            meta.height = mpp_frame_get_height(frame);
+                            static DmabufFrameInfo meta;
+                            const uint32_t width = mpp_frame_get_width(frame);
+                            const uint32_t height = mpp_frame_get_height(frame);
+                            const RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
+                            const RK_U32 ver_stride = mpp_frame_get_ver_stride(frame);
+                            uint32_t fourcc = DRM_FORMAT_NV12;
                             if (fmt == MPP_FMT_YUV420SP_10BIT) {
 #ifdef DRM_FORMAT_NV12_10LE40
-                                meta.fourcc = DRM_FORMAT_NV12_10LE40;
+                                fourcc = DRM_FORMAT_NV12_10LE40;
 #else
-                                meta.fourcc = DRM_FORMAT_NV12;
+                                fourcc = DRM_FORMAT_NV12;
 #endif
-                            } else {
-                                meta.fourcc = DRM_FORMAT_NV12;
                             }
-                            meta.num_planes = 2;
-                            meta.fd_count = 1;
-                            RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
-                            RK_U32 ver_stride = mpp_frame_get_ver_stride(frame);
-                            meta.strides[0] = hor_stride;
-                            meta.strides[1] = hor_stride;
-                            meta.offsets[0] = 0;
-                            meta.offsets[1] = hor_stride * ver_stride;
-                            meta.modifiers[0] = DRM_FORMAT_MOD_LINEAR;
-                            meta.modifiers[1] = meta.modifiers[0];
+                            const uint32_t stride0 = hor_stride;
+                            const uint32_t stride1 = hor_stride;
+                            const uint32_t offset1 = hor_stride * ver_stride;
+                            const uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+                            if (!dmabuf_meta_matches(meta, width, height, fourcc, stride0, stride1, offset1, modifier)) {
+                                memset(&meta, 0, sizeof(meta));
+                                meta.magic = 0x46505645; // "FPVE"
+                                meta.version = 1;
+                                meta.header_size = sizeof(meta);
+                                meta.width = width;
+                                meta.height = height;
+                                meta.fourcc = fourcc;
+                                meta.num_planes = 2;
+                                meta.fd_count = 1;
+                                meta.strides[0] = stride0;
+                                meta.strides[1] = stride1;
+                                meta.offsets[0] = 0;
+                                meta.offsets[1] = offset1;
+                                meta.modifiers[0] = modifier;
+                                meta.modifiers[1] = modifier;
+                            }
                             meta.pts_ms = feed_data_ts;
                             send_dmabuf_frame(info.fd, &meta);
                         }
