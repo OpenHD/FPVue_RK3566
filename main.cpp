@@ -338,7 +338,6 @@ void initialize_output_buffers(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
 
         MppBufferInfo info;
@@ -548,7 +547,6 @@ void initialize_output_buffers_memcpy(MppFrame  frame){
         } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
         assert(!ret);
         mpi.frame_to_drm[i].memory_mmap_size=dmcd.size;
-        printf("Buffer size bytes %d\n",(int)dmcd.size);
         //
         if(i!=0){
             MppBufferInfo info;
@@ -639,7 +637,7 @@ void *__FRAME_THREAD__(void *param)
 
                     uint64_t feed_data_ts=mpp_frame_get_pts(frame);
                     uint64_t decoding_latency=get_time_ms()-feed_data_ts;
-                    accumulate_and_print("Decode",decoding_latency,&m_decoding_latency);
+                    // Decode timing logging removed to avoid per-second spam.
                     //print_time_ms("Decode",decoding_latency);
 
                     if(develop_rendering_mode==8){
