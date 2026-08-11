@@ -1050,9 +1050,9 @@ bool feed_packet_to_decoder(MppPacket *packet,void* data_p,int data_len){
     return true;
 }
 
-void configure_x20(MppPacket *packet){
-    printf("Applying x20 hack\n");
-    FILE *fp = fopen("/usr/local/bin/x20_header.h264", "rb");
+void configure_recovery_seed(MppPacket *packet, const char* header_path, const char* source_name){
+    printf("Applying %s recovery seed\n", source_name);
+    FILE *fp = fopen(header_path, "rb");
     assert(fp);
     fseek(fp, 0L, SEEK_END);
     long size = ftell(fp);
@@ -1086,7 +1086,11 @@ void read_gstreamerpipe_stream(MppPacket *packet){
                 const int x20_check=check_for_x20(frame->data(),frame->size());
                 if(x20_check==1){
                     // We have an x20
-                    configure_x20(packet);
+                    configure_recovery_seed(packet, "/usr/local/bin/x20_header.h264", "X20");
+                    air_unit_discovery_finished= true;
+                }else if(x20_check==3){
+                    // RV1126(B)/X21 MPP cyclic-intra stream
+                    configure_recovery_seed(packet, "/usr/local/bin/x21_header.h264", "X21/RV1126B");
                     air_unit_discovery_finished= true;
                 }else if(x20_check==2){
                     // We have no x20 (definitely)
@@ -1114,7 +1118,7 @@ void read_gstreamerpipe_stream(MppPacket *packet){
         feed_packet_to_decoder(packet,frame->data(),frame->size());
     };
     if(x20_force){
-        configure_x20(packet);
+        configure_recovery_seed(packet, "/usr/local/bin/x20_header.h264", "X20");
     }
     receiver.start_receiving(cb);
     while (!signal_flag){

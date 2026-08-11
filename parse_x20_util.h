@@ -28,8 +28,9 @@ static uint8_t X20_PPS[]={
 };
 
 // Return 0: Not yet know
-// Return 1: Definitely x20
-// Return 2: Definitely not x20
+// Return 1: Definitely X20
+// Return 2: Definitely neither X20 nor X21
+// Return 3: RV1126(B)/X21 MPP cyclic-intra stream
 bool has_x20_sps= false;
 bool has_x20_pps= false;
 static int check_for_x20(const uint8_t* data, int data_len){
@@ -42,6 +43,14 @@ static int check_for_x20(const uint8_t* data, int data_len){
         if(data_len==sizeof(X20_SPS) && memcmp(data,&X20_SPS,data_len)==0){
             printf("X20 SPS\n");
             has_x20_sps= true;
+        }else if(data_len >= 8
+                 && data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] == 1
+                 && data[4] == 0x67 && data[5] == 0x64 && data[7] == 0x2a){
+            // RV1126(B) MPP: H.264 High Profile, level 4.2.  The encoder
+            // uses cyclic intra refresh, so a receiver joining midstream
+            // requires the X21 recovery seed before live P pictures.
+            printf("X21/RV1126B MPP SPS\n");
+            return 3;
         }else{
             return 2;
         }
